@@ -7,11 +7,18 @@ from database import Base
 class Order(Base):
     __tablename__ = "orders"
 
-    id: Mapped[int] = mapped_column(primary_key=True)
+    order_id: Mapped[int] = mapped_column(primary_key=True)
 
-    customer_name: Mapped[str] = mapped_column(String(100))
+    customer_id: Mapped[int] = mapped_column(
+        ForeignKey("customers.customer_id")
+    )
 
-    product_name: Mapped[str] = mapped_column(String(100))
+    product_id: Mapped[int] = mapped_column(
+        ForeignKey("products.product_id")
+    )
+    cart_id : Mapped[int] = mapped_column(
+        ForeignKey("carts.cart_id")
+    )
 
     quantity: Mapped[int] = mapped_column(Integer)
 

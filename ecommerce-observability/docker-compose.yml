@@ -1,4 +1,16 @@
 services:
+  postgres:
+    image: postgres:16
+    container_name: ecommerce-postgres
+
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: 28012005
+      POSTGRES_DB: ecommerce
+
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
 
   product-service:
     build:
@@ -7,14 +19,21 @@ services:
     container_name: product-service
 
     ports:
-      - "8001:8000"
-
-
-  order-service:
-    build:
-      context: ./services/order-service
-
-    container_name: order-service
-
-    ports:
       - "8002:8000"
+
+    depends_on:
+      - postgres
+  cart-service:
+    build: 
+      context: ./services/cart-service
+
+    container_name: cart-service
+    
+    ports:
+      - "8003:8000"
+    depends_on:
+      - postgres
+      - product-service
+
+volumes:
+  postgres_data:

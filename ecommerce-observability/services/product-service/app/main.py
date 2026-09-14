@@ -1,17 +1,26 @@
 from fastapi import FastAPI
 
-app = FastAPI(title="Product-service")
+from app.database.database import Base, engine
+from app.models.product import Product
+from app.routers.products import router as product_router
+
+Base.metadata.create_all(bind=engine)
+
+
+app = FastAPI(
+    title="Product Service",
+    version="1.0.0"
+)
+
+app.include_router(product_router)
 
 @app.get("/")
 def root():
     return {
-        "service": "product-service",
-        "status": "running"
+        "service" : "product-service",
+        "status" : "running"
     }
 
 @app.get("/health")
 def health():
-    return {
-        "status": "healthy"
-    }
-
+    return {"status": "healthy" }

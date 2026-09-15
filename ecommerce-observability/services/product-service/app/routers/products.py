@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-
+from sqlalchemy.exc import IntegrityError
 
 from app.database.database import get_db
 from app.models.product import Product
@@ -44,17 +44,21 @@ def create_product(product_data: ProductCreate, db:Session = Depends(get_db)):
 
 @router.put("/{product_id}", response_model= ProductResponse)
 def update_product(product_id: int, product_data: ProductUpdate, db: Session = Depends(get_db)):
-    product = db.get(Product, product_id)
+    statement = select(Product).where(Product.product_id == product_id).with_for_update()
+    product = db.scalars(statement).first()
 
     if product is None:
         raise HTTPException(status_code=404, detail="Product not found!")
     update_data = product_data.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(product,field, value)
-    db.commit()
-    db.refresh(product)
-    return product
-
+    try:
+        db.commit()
+        db.refresh(product)
+        return product
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Update conflicts with existing product data")
 
 
 @router.delete("/{product_id}", status_code=204)

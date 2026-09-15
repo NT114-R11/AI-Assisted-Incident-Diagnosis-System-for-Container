@@ -11,7 +11,7 @@ class ProductBase(BaseModel):
 class ProductCreate(ProductBase):
     pass
 
-class ProductUpdate(ProductBase):
+class ProductUpdate(BaseModel):
     product_name:str | None = None
     quantity: int | None = None
     description: str | None = None

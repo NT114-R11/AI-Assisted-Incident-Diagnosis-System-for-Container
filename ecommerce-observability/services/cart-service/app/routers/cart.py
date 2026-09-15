@@ -3,7 +3,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-
+from sqlalchemy.exc import IntegrityError
 from app.database.database import get_db
 from app.models.cart import Cart
 from app.models.cart_item import CartItem
@@ -15,6 +15,12 @@ router = APIRouter(prefix="/carts", tags=["Carts"])
 #Get product service 
 PRODUCT_SERVICE_URL = "http://product-service:8000"
 
+# A helper function calculate total price
+def recalculate_cart_total(cart: Cart, db:Session = Depends(get_db)):
+    statement = select(CartItem).where(Cart.cart_id == cart.cart_id) 
+    items = db.scalars(statement).all()#Get all object in a cart
+    cart.total_price = sum (item.price * item.quantity for item in items) # calculate all items which is store in the cart
+
 # Create cart
 @router.post("/", response_model=CartResponse, status_code=201)
 def create_cart(cart_data:CartCreate, db: Session = Depends(get_db)):
@@ -25,9 +31,13 @@ def create_cart(cart_data:CartCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=409, detail="Customer already has a cart")
     cart = Cart(customer_id= cart_data.customer_id, total_price=0)
     db.add(cart)
-    db.commit()
-    db.refresh(cart)
-    return cart
+    try:
+        db.commit()
+        db.refresh(cart)
+        return cart
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Customer already has a cart")
 # Load Cart
 @router.get("/{cart_id}", response_model=CartResponse)
 def get_cart(cart_id:int, db: Session = Depends(get_db)):
@@ -42,6 +52,8 @@ def get_cart(cart_id:int, db: Session = Depends(get_db)):
 @router.post("/{cart_id}/items", response_model=CartItemResponse, status_code=201)
 def add_cart_item(cart_id:int, item_data: CartItemCreate, db:Session = Depends(get_db)):
     cart = db.get(Cart, cart_id) # Choose the card which prepare to add an item
+    statement = select(Cart).where(Cart.cart_id == cart_id).with_for_update()
+    cart = db.scalars(statement).first()
     if cart is None: # Check if there is no card, raise an error to announce user
         raise HTTPException(status_code=404, detail="Cart not found!")
     try:
@@ -62,11 +74,11 @@ def add_cart_item(cart_id:int, item_data: CartItemCreate, db:Session = Depends(g
     # Check if product already exists in cart
 
     #1. Take a cartitem to examine product id
-    statement = select(CartItem).where(
+    item_stmt = select(CartItem).where(
         CartItem.cart_id == cart_id,
         CartItem.product_id == item_data.product_id
     )
-    cart_item = db.scalars(statement).first()
+    cart_item = db.scalars(item_stmt).first()
     if cart_item: #if the item exists in a cart, do update its quantity.
         new_quantity = cart_item.quantity + item_data.quantity
         if new_quantity > product["quantity"]:
@@ -81,16 +93,14 @@ def add_cart_item(cart_id:int, item_data: CartItemCreate, db:Session = Depends(g
         db.add(cart_item)
     db.flush()
     #Recalculate the total price again
-    statement = select(CartItem).where(
-        CartItem.cart_id == cart_id
-    )
-
-    items = db.scalars(statement).all() #Get all object in a cart
-    cart.total_price = sum(item.price * item.quantity  for item in items) # calculate all items which is store in the cart
-    db.commit()
-    db.refresh(cart_item)
-    return cart_item
-    
+    recalculate_cart_total(cart,db)
+    try:    
+        db.commit()
+        db.refresh(cart_item)
+        return cart_item
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Concurrent request error on cart item")
 @router.put("/{cart_id}/items/{item_id}", response_model=CartItemResponse)
 def update_cart_item(cart_id:int, 
                     item_id: int, 
@@ -128,7 +138,8 @@ def update_cart_item(cart_id:int,
 # Delete item out of cart
 @router.delete("/{cart_id}/items/{item_id}", status_code=204)
 def delete_cart_item(cart_id:int, item_id:int,db:Session = Depends(get_db)):
-    cart = db.get(Cart, cart_id)
+    statement = select(Cart).where(Cart.cart_id == cart_id).with_for_update()
+    cart = db.scalars(statement).first()
     if cart is None:
         raise HTTPException(status_code=404, detail="Cart is not found!")
     cart_item = db.get(CartItem, item_id)
@@ -136,12 +147,7 @@ def delete_cart_item(cart_id:int, item_id:int,db:Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Item is not found in your cart")
     db.delete(cart_item)
     db.flush()
-    statement = select(CartItem).where(
-        CartItem.cart_id == cart_id
-    )
-
-    items = db.scalars(statement).all()
-    cart.total_price = sum(item.price * item.quantity for item in items)
+    recalculate_cart_total(cart,db)
     db.commit()
 
 @router.delete("/{cart_id}", status_code=204)

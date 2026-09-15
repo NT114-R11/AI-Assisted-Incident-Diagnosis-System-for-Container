@@ -1,4 +1,4 @@
-from sqlalchemy import ForeignKey, Numeric, Integer
+from sqlalchemy import ForeignKey, Numeric, Integer, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.database import Base
@@ -6,7 +6,9 @@ from app.database.database import Base
 
 class CartItem(Base):
     __tablename__ = "cart_items"
-
+    __table_args__ = (
+        UniqueConstraint("cart_id", "product_id", name="uq_cart_product"),
+    )
     item_id: Mapped[int] = mapped_column(
         Integer,
         primary_key=True,

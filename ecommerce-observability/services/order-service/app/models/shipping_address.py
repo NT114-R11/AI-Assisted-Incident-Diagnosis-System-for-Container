@@ -34,5 +34,5 @@ class ShippingAddress(Base):
     )
     orders: Mapped[list["Order"]] = relationship(
         "Order",
-        back_populates="shipping_addresses"
+        back_populates="shipping_address"
     )

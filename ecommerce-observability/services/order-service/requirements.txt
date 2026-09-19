@@ -4,3 +4,4 @@ sqlalchemy
 psycopg[binary]
 pydantic
 httpx
+email-validator>=2.0.0

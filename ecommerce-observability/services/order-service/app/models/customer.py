@@ -39,3 +39,8 @@ class Customer(Base):
         back_populates="customer",
         cascade="all, delete-orphan"
     )
+    billing_addresses: Mapped[list["BillingAddress"]] = relationship(
+        "BillingAddress",
+        back_populates="customer",
+        cascade="all, delete-orphan",
+    )

@@ -16,8 +16,8 @@ router = APIRouter(prefix="/carts", tags=["Carts"])
 PRODUCT_SERVICE_URL = "http://product-service:8000"
 
 # A helper function calculate total price
-def recalculate_cart_total(cart: Cart, db:Session = Depends(get_db)):
-    statement = select(CartItem).where(Cart.cart_id == cart.cart_id) 
+def recalculate_cart_total(cart: Cart, db:Session):
+    statement = select(CartItem).where(CartItem.cart_id == cart.cart_id) 
     items = db.scalars(statement).all()#Get all object in a cart
     cart.total_price = sum (item.price * item.quantity for item in items) # calculate all items which is store in the cart
 
@@ -51,8 +51,7 @@ def get_cart(cart_id:int, db: Session = Depends(get_db)):
 # Add item to list
 @router.post("/{cart_id}/items", response_model=CartItemResponse, status_code=201)
 def add_cart_item(cart_id:int, item_data: CartItemCreate, db:Session = Depends(get_db)):
-    cart = db.get(Cart, cart_id) # Choose the card which prepare to add an item
-    statement = select(Cart).where(Cart.cart_id == cart_id).with_for_update()
+    statement = select(Cart).where(Cart.cart_id == cart_id).with_for_update()  # Choose the card which prepare to add an item
     cart = db.scalars(statement).first()
     if cart is None: # Check if there is no card, raise an error to announce user
         raise HTTPException(status_code=404, detail="Cart not found!")
@@ -100,14 +99,15 @@ def add_cart_item(cart_id:int, item_data: CartItemCreate, db:Session = Depends(g
         return cart_item
     except IntegrityError:
         db.rollback()
-        raise HTTPException(status_code=409, detail="Concurrent request error on cart item")
+        raise HTTPException(status_code=409, detail="Current request error on cart item")
+        
 @router.put("/{cart_id}/items/{item_id}", response_model=CartItemResponse)
 def update_cart_item(cart_id:int, 
                     item_id: int, 
                     item_data: CartItemUpdate, 
                     db: Session = Depends(get_db)):
-    pass
-    cart = db.get(Cart, cart_id)
+    statement = select(Cart).where(Cart.cart_id == cart_id).with_for_update()
+    cart = db.scalars(statement).first()
     if cart is None:
         raise HTTPException(status_code=404, detail="Cart not found!")
     cart_item = db.get(CartItem, item_id)
@@ -127,16 +127,16 @@ def update_cart_item(cart_id:int,
     cart_item.quantity = item_data.quantity
     cart_item.price = Decimal(str(product["price"]))
     db.flush()
-    statement = select(CartItem).where(
-        CartItem.cart_id == cart_id
-    )
-    items = db.scalars(statement).all()
-    cart.total_price = sum(item.price * item.quantity for item in items)
-    db.commit()
-    db.refresh(cart_item)
-    return cart_item
+    recalculate_cart_total(cart,db)
+    try:
+        db.commit()
+        db.refresh(cart_item)
+        return cart_item
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Failed to update item")
 # Delete item out of cart
-@router.delete("/{cart_id}/items/{item_id}", status_code=204)
+@router.delete("/{cart_id}/items/{item_id}")
 def delete_cart_item(cart_id:int, item_id:int,db:Session = Depends(get_db)):
     statement = select(Cart).where(Cart.cart_id == cart_id).with_for_update()
     cart = db.scalars(statement).first()
@@ -148,12 +148,22 @@ def delete_cart_item(cart_id:int, item_id:int,db:Session = Depends(get_db)):
     db.delete(cart_item)
     db.flush()
     recalculate_cart_total(cart,db)
-    db.commit()
+    try:
+        db.commit()
+        return {"message": "Item was deleted successfully"}
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Failed to delete cart item")
 
-@router.delete("/{cart_id}", status_code=204)
+@router.delete("/{cart_id}")
 def delete_cart(cart_id: int, db: Session = Depends(get_db)):
     cart = db.get(Cart, cart_id)
     if cart is None:
         raise HTTPException(status_code=404, detail="Cart not found!")
     db.delete(cart)
-    db.commit()
+    try:
+        db.commit()
+        return {"message": "Cart was deleted successfully"}
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Failed to delete cart")

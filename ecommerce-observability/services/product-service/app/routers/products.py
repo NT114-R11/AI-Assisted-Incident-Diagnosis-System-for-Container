@@ -5,6 +5,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.database.database import get_db
 from app.models.product import Product
+from app.models.seller import Seller
 from app.schemas.product import (
     ProductCreate,
     ProductUpdate,
@@ -36,11 +37,19 @@ def get_product(product_id: int, db: Session = Depends(get_db)):
 
 @router.post("/", response_model=ProductResponse, status_code=201)
 def create_product(product_data: ProductCreate, db:Session = Depends(get_db)):
+    seller = db.get(Seller, product_data.seller_id)
+
+    if not seller:
+        raise HTTPException(status_code=404, detail=f"Seller with seller id {product_data.seller_id} does not exists")
     product = Product(**product_data.model_dump()) ## spread out the object
     db.add(product)
-    db.commit()
-    db.refresh(product)
-    return product
+    try:
+        db.commit()
+        db.refresh(product)
+        return product
+    except IntegrityError: 
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Failed to create product due to integrity error.")
 
 @router.put("/{product_id}", response_model= ProductResponse)
 def update_product(product_id: int, product_data: ProductUpdate, db: Session = Depends(get_db)):
@@ -49,6 +58,10 @@ def update_product(product_id: int, product_data: ProductUpdate, db: Session = D
 
     if product is None:
         raise HTTPException(status_code=404, detail="Product not found!")
+    if product_data.seller_id is not None:
+        seller = db.get(Seller, product_data.seller_id)
+        if not seller:
+            raise HTTPException(status_code=404, detail=f"Seller with id {product_data.seller_id} does not exist.")
     update_data = product_data.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(product,field, value)

@@ -7,6 +7,7 @@ class ProductBase(BaseModel):
     manufacturer: str | None = None
     categories: str | None = None
     price: float 
+    seller_id: int
 
 class ProductCreate(ProductBase):
     pass
@@ -18,9 +19,8 @@ class ProductUpdate(BaseModel):
     manufacturer: str | None = None
     categories: str | None = None
     price: float  | None = None
+    seller_id: int | None = None
 
 class ProductResponse(ProductBase):
     product_id: int
-    model_config = ConfigDict(
-        from_attributes=True
-    )
+    model_config = ConfigDict(from_attributes=True)

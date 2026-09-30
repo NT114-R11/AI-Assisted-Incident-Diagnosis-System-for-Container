@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+import httpx
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
@@ -8,10 +9,25 @@ from app.database.database import get_db
 from app.models.seller import Seller
 from app.schemas.seller import (SellerCreate, SellerResponse, SellerUpdate)
 
+USER_SERVICE_URL = "http://user-service:8000"
 router = APIRouter(prefix="/sellers", tags=["Sellers"])
 
 @router.post("/", response_model=SellerResponse)
-def create_seller(data: SellerCreate, db: Session = Depends(get_db)):
+async def create_seller(data: SellerCreate, db: Session = Depends(get_db)):
+    # Call user service for verify user
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(f"{USER_SERVICE_URL}/users/internal/{data.user_email}")
+            if response.status_code == 404:
+                raise HTTPException(status_code= status.HTTP_404_NOT_FOUND, detail="User email does not exist in user-service")
+            elif response.status_code != 200:
+                raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="user-service error to during verfication")
+        except httpx.RequestError:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="user-service is unavailable")
+
+    existing_seller = db.scalars(select(Seller).where(Seller.user_email == data.user_email)).first()
+    if existing_seller:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Seller with this email already exists.")
     seller = Seller(**data.model_dump())
     db.add(seller)
     try:

@@ -19,7 +19,7 @@ CART_SERVICE_URL = "http://cart-service:8000"
 router = APIRouter(prefix="/orders", tags=["Orders"])
 
 @router.post("/", response_model=OrderResponse)
-def create_order (data: OrderCreate, db: Session = Depends(get_db)):
+async def create_order (data: OrderCreate, db: Session = Depends(get_db)):
     #Check customer
     customer = db.get(Customer, data.customer_id)
     if not customer:
@@ -39,17 +39,19 @@ def create_order (data: OrderCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Billing address does not belong to customer")
     
     # Call to cart service
-    try:
-        response = httpx.get(f"{CART_SERVICE_URL}/carts/{data.cart_id}", timeout=5.0)
-    except httpx.RequestError:
-        raise HTTPException(status_code=503, detail="Cart Service unavailable")
-    
-    if response.status_code == 404:
-        raise HTTPException(status_code=404, detail="Cart not found")
+    async with httpx.AsyncClient() as client:
+            
+        try:
+            response = await client.get(f"{CART_SERVICE_URL}/carts/{data.cart_id}", timeout=5.0)
+        except httpx.RequestError:
+            raise HTTPException(status_code=503, detail="Cart Service unavailable")
+        
+        if response.status_code == 404:
+            raise HTTPException(status_code=404, detail="Cart not found")
 
-    if response.status_code != 200:
-        raise HTTPException(status_code=400, detail="Cart-Service error")
-    
+        if response.status_code != 200:
+            raise HTTPException(status_code=400, detail="Cart-Service error")
+        
     cart_data = response.json()
     cart_items = cart_data.get("items", [])
     if not cart_items:
@@ -79,8 +81,10 @@ def create_order (data: OrderCreate, db: Session = Depends(get_db)):
         db.rollback()
         raise HTTPException(status_code=400, detail="Invalid customer, address, or cart references")
     # Clear cart out order when place order successfully
+    
     try:
-        httpx.delete(f"{CART_SERVICE_URL}/carts/{data.cart_id}", timeout=5.0)
+        async with httpx.AsyncClient() as client:
+            await client.delete(f"{CART_SERVICE_URL}/carts/{data.cart_id}", timeout=5.0)
     except httpx.RequestError as exc:
         logger.warning(f"Order {order.order_number} created, but failed to clear cart {data.cart_id}: {exc}")
     return order

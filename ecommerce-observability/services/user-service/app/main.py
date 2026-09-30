@@ -73,4 +73,13 @@ app.include_router(authority.router)
 
 @app.get("/")
 def root():
-    return {"message": "User service is running"}
+    return {
+        "service": "User service", 
+        "status": "running"}
+
+@app.get("/health")
+def health():
+    return {
+        "status": "healthy",
+        "service": "user-service"
+    }

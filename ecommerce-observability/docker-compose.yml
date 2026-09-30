@@ -11,6 +11,25 @@ services:
 
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    
+  
+  user-service:
+    build:
+      context: ./services/user-service
+    
+    container_name: user-service
+
+    ports:
+      - "8001:8000"
+    environment:
+      JWT_SECRET_KEY: 91ezxkaejRgSPr4J6twBclO3TX56upTNLHfkqrZrlFr
+      ACCESS_TOKEN_EXPIRE_MINUTES: 60
+
+      ADMIN_EMAIL: silverhd280105@gmail.com
+      ADMIN_PASSWORD: quenmatkhau123
+    
+    depends_on:
+      - postgres
 
   product-service:
     build:

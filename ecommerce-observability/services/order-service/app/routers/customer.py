@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException
+import httpx
+from fastapi import APIRouter, Depends, HTTPException,status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -9,14 +10,25 @@ from app.schemas.customer import (CustomerCreate, CustomerResponse, CustomerUpda
 
 router = APIRouter(prefix="/customers", tags=["Customers"])
 
+USER_SERVICE_URL = "http://user-service:8000"
 #Create a customer
 @router.post("/", response_model=CustomerResponse)
-def create_customer(customer: CustomerCreate, db: Session = Depends(get_db)):
+async def create_customer(customer: CustomerCreate, db: Session = Depends(get_db)):
+    # Call user service for verify user
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(f"{USER_SERVICE_URL}/users/internal/{customer.email}")       
+            if response.status_code == 404:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User email does not exist in user-service")
+            elif response.status_code != 200:
+                raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE,detail= "user-service error during verfication")
+        except httpx.RequestError:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="user-service is unavailable")
     statement = select(Customer).where(Customer.email == customer.email)
     existing_customer = db.scalars(statement).first()
 
     if existing_customer:
-        raise HTTPException(status_code=409, detail="Email is already exists")
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email is already exists")
     new_customer = Customer(
         name = customer.name,
         email = customer.email,

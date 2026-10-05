@@ -1,0 +1,99 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: ecommerce-postgres
+
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: 28012005
+      POSTGRES_DB: ecommerce
+
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    
+  
+  user-service:
+    build:
+      context: ./services/user-service
+    
+    container_name: user-service
+
+    ports:
+      - "8001:8000"
+    environment:
+      JWT_SECRET_KEY: 91ezxkaejRgSPr4J6twBclO3TX56upTNLHfkqrZrlFr
+      ACCESS_TOKEN_EXPIRE_MINUTES: 60
+
+      ADMIN_EMAIL: silverhd280105@gmail.com
+      ADMIN_PASSWORD: quenmatkhau123
+    
+    depends_on:
+      - postgres
+
+  product-service:
+    build:
+      context: ./services/product-service
+
+    container_name: product-service
+
+    ports:
+      - "8002:8000"
+
+    depends_on:
+      - postgres
+      
+  cart-service:
+    build: 
+      context: ./services/cart-service
+
+    container_name: cart-service
+    
+    ports:
+      - "8003:8000"
+    depends_on:
+      - postgres
+      - product-service
+      
+  
+  order-service:
+    build:
+      context: ./services/order-service
+    
+    container_name: order-service
+    
+    ports:
+      - "8004:8000"
+    depends_on:
+      - postgres
+      - cart-service
+  
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: ecommerce-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    depends_on:
+      - user-service
+      - product-service
+      - cart-service
+      - order-service
+  
+  grafana:
+    image: grafana/grafana:latest
+    container_name: ecommerce-grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    depends_on:
+      - prometheus
+
+volumes:
+  postgres_data:
+  grafana_data:

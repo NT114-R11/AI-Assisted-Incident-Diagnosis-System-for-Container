@@ -1,17 +1,47 @@
+import os
+
+from dotenv import load_dotenv
 from sqlalchemy import create_engine
-from sqlalchemy.orm import DeclarativeBase, sessionmaker
+from sqlalchemy.engine import URL
+from sqlalchemy.orm import sessionmaker, DeclarativeBase
 
-DATABASE_URL = "postgresql+psycopg://admin:28012005@postgres:5432/ecommerce"
+load_dotenv()  
 
-engine = create_engine(DATABASE_URL, echo=True)
 
-SessionLocal = sessionmaker(
-    bind=engine, 
-    autoflush=True
+def build_database_url():
+    url = os.getenv("DATABASE_URL")
+    if url:
+        return url
+
+    password = os.getenv("POSTGRES_PASSWORD")
+    if not password:
+        raise RuntimeError("Missing DATABASE_URL or POSTGRES_PASSWORD")
+
+    return URL.create(
+        drivername="postgresql+psycopg",
+        username=os.getenv("POSTGRES_USER", "admin"),
+        password=password,
+        host=os.getenv("DB_HOST", "localhost"),
+        port=int(os.getenv("DB_PORT", "5432")),
+        database=os.getenv("POSTGRES_DB", "ecommerce"),
+    )
+
+
+engine = create_engine(
+    build_database_url(),
+    pool_pre_ping=True,
+    pool_size=5,
+    max_overflow=10,
+    pool_recycle=1800,
+    echo=False,
 )
+
+SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+
 
 class Base(DeclarativeBase):
     pass
+
 
 def get_db():
     db = SessionLocal()

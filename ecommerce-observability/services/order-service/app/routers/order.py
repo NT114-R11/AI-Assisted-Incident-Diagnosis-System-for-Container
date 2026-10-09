@@ -37,7 +37,7 @@ async def rollback_stock(client: httpx.AsyncClient, items: list):
 
 @router.post("/", response_model=OrderResponse, status_code=status.HTTP_201_CREATED)
 async def create_order(data: OrderCreate, db: Session = Depends(get_db)):
-    # 1. Check customer, shipping, billing address
+    # Check if customer exists and validate shipping/billing addresses
     customer = db.get(Customer, data.customer_id)
     if not customer:
         raise HTTPException(status_code=404, detail="Customer not found!")
@@ -49,89 +49,85 @@ async def create_order(data: OrderCreate, db: Session = Depends(get_db)):
     billing_address = db.get(BillingAddress, data.billing_address_id)
     if not billing_address or billing_address.customer_id != data.customer_id:
         raise HTTPException(status_code=400, detail="Invalid billing address")
-    
-    # 2. Get information from Cart Service
+
+    deducted_items = []   # roollback stock in case of failure
+    order_items = []      # List of OrderItem 
+
     async with httpx.AsyncClient(timeout=5.0) as client:
+        # Get cart details from Cart Service
         try:
             cart_resp = await client.get(f"{CART_SERVICE_URL}/carts/{data.cart_id}")
         except httpx.RequestError:
             raise HTTPException(status_code=503, detail="Cart Service unavailable")
-        
+
         if cart_resp.status_code == 404:
             raise HTTPException(status_code=404, detail="Cart not found")
         if cart_resp.status_code != 200:
             raise HTTPException(status_code=400, detail="Cart-Service error")
-        
+
         cart_data = cart_resp.json()
         cart_items = cart_data.get("items", [])
         if not cart_items:
             raise HTTPException(status_code=400, detail="Cart is empty. Cannot place order.")
 
-        # 3. Deal with restock Product Service
-        deducted_items = [] # Save the items that have been deducted successfully for potential rollback
+        # 3. Deduct stock for each item in the cart from Product Service
         for item in cart_items:
             p_id = item["product_id"]
             qty = item["quantity"]
-            
+
             try:
-                # Call Product Service to deduct stock
                 stock_resp = await client.patch(
                     f"{PRODUCT_SERVICE_URL}/products/{p_id}/deduct-stock",
-                    json={"quantity": qty}
+                    json={"quantity": qty},
                 )
             except httpx.RequestError:
-                # If Product Service is unavailable, rollback any previously deducted stock
                 await rollback_stock(client, deducted_items)
                 raise HTTPException(status_code=503, detail="Product Service unavailable during stock deduction")
 
             if stock_resp.status_code != 200:
-                # Do not forget to rollback any previously deducted stock if this one fails
                 await rollback_stock(client, deducted_items)
                 raise HTTPException(
-                    status_code=stock_resp.status_code, 
-                    detail=f"Failed to deduct stock for product {p_id}: {stock_resp.json().get('detail')}"
+                    status_code=stock_resp.status_code,
+                    detail=f"Failed to deduct stock for product {p_id}: {stock_resp.json().get('detail')}",
                 )
-            
-            deducted_items.append({"product_id": p_id, "quantity": qty})
 
-    # 4. Create Order and OrderItems in the database
+            product = stock_resp.json()
+            unit_price = Decimal(str(product["price"]))   
+
+            deducted_items.append({"product_id": p_id, "quantity": qty})
+            order_items.append(OrderItem(product_id=p_id, quantity=qty, price=unit_price))
+
+    # 4. Create the order in the database
+    total_price = sum((i.price * i.quantity for i in order_items), Decimal("0.00"))
+
     order = Order(
         customer_id=data.customer_id,
         cart_id=data.cart_id,
         shipping_address_id=data.shipping_address_id,
         billing_address_id=data.billing_address_id,
-        total_price=Decimal(str(cart_data.get("total_price", 0))),
-        status="PENDING"  
+        total_price=total_price,
+        status="PENDING",
     )
-    for item in cart_items:
-        order_item = OrderItem(
-            product_id=item["product_id"],
-            quantity=item["quantity"],
-            price=Decimal(str(item["price"]))
-        )
-        order.items.append(order_item)
+    order.items.extend(order_items)
 
     db.add(order)
-    try:            
+    try:
         db.commit()
         db.refresh(order)
     except IntegrityError:
         db.rollback()
-        # Rollback stock in Product Service if order creation fails
         async with httpx.AsyncClient(timeout=5.0) as client:
             await rollback_stock(client, deducted_items)
         raise HTTPException(status_code=400, detail="Invalid references on Order creation")
-    
+
     # 5. Delete the cart from Cart Service after successful order creation
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             await client.delete(f"{CART_SERVICE_URL}/carts/{data.cart_id}")
     except httpx.RequestError as exc:
         logger.warning(f"Order {order.order_number} created, but failed to clear cart {data.cart_id}: {exc}")
-        
+
     return order
-
-
 @router.get("/", response_model=list[OrderResponse])
 def get_orders(db:Session = Depends(get_db)):
     statement = select(Order).options(joinedload(Order.items))

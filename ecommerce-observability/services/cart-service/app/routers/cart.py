@@ -1,6 +1,6 @@
 from decimal import Decimal
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 import uuid
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -19,11 +19,16 @@ PRODUCT_SERVICE_URL = "http://product-service:8000"
 ORDER_SERVICE_URL = "http://order-service:8000"
 
 # A helper function calculate total price
-def recalculate_cart_total(cart: Cart, db:Session):
-    statement = select(CartItem).where(CartItem.cart_id == cart.cart_id) 
-    items = db.scalars(statement).all()#Get all object in a cart
-    cart.total_price = sum (item.price * item.quantity for item in items) # calculate all items which is store in the cart
-
+def recalculate_cart_total(cart: Cart, db: Session):
+    items = db.scalars(select(CartItem).where(CartItem.cart_id == cart.cart_id)).all()
+    
+    total = Decimal("0.00")
+    for item in items:
+        if item not in db.deleted:
+            total += Decimal(str(item.price)) * item.quantity
+            
+    cart.total_price = total
+    db.add(cart) 
 # Create cart
 @router.post("/", response_model=CartResponse, status_code=201)
 async def create_cart(cart_data:CartCreate, db: Session = Depends(get_db)):
@@ -80,7 +85,7 @@ def get_cart(cart_id: uuid.UUID, db: Session = Depends(get_db)):
 
 # Add item to list
 @router.post("/{cart_id}/items", response_model=CartItemResponse, status_code=201)
-def add_cart_item(cart_id: uuid.UUID, item_data: CartItemCreate, db:Session = Depends(get_db)):
+def add_cart_item(cart_id: uuid.UUID, item_data: CartItemCreate,request: Request, db:Session = Depends(get_db)):
     statement = select(Cart).where(Cart.cart_id == cart_id).with_for_update()  # Choose the card which prepare to add an item
     cart = db.scalars(statement).first()
     if cart is None: # Check if there is no card, raise an error to announce user
@@ -130,6 +135,7 @@ def add_cart_item(cart_id: uuid.UUID, item_data: CartItemCreate, db:Session = De
     try:    
         db.commit()
         db.refresh(cart_item)
+        db.refresh(cart)
         return cart_item
     except IntegrityError:
         db.rollback()
@@ -181,18 +187,22 @@ def delete_cart_item(cart_id: uuid.UUID, item_id: uuid.UUID, db: Session = Depen
     cart = db.scalars(statement).first()
     if cart is None:
         raise HTTPException(status_code=404, detail="Cart is not found!")
+        
     cart_item = db.get(CartItem, item_id)
     if cart_item is None or cart_item.cart_id != cart_id:
         raise HTTPException(status_code=404, detail="Item is not found in your cart")
+    
     db.delete(cart_item)
-    db.flush()
-    recalculate_cart_total(cart,db)
+    
+    recalculate_cart_total(cart, db)
+    
     try:
         db.commit()
         return {"message": "Item was deleted successfully"}
     except IntegrityError:
         db.rollback()
         raise HTTPException(status_code=400, detail="Failed to delete cart item")
+
 
 @router.delete("/{cart_id}")
 def delete_cart(cart_id: uuid.UUID, db: Session = Depends(get_db)):

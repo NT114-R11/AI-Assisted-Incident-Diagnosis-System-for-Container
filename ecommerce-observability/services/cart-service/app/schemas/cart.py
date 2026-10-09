@@ -10,4 +10,4 @@ class CartResponse(BaseModel):
     cart_id: uuid.UUID
     customer_id: uuid.UUID
     total_price: Decimal
-    items: list[CartItemResponse]
+    items: list[CartItemResponse] = []

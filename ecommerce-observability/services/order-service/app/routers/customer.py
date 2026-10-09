@@ -47,8 +47,8 @@ async def create_customer(customer: CustomerCreate, db: Session = Depends(get_db
 # Get customer
 @router.get("/", response_model=list[CustomerResponse])
 def get_customers(db: Session = Depends(get_db)):
-    result = db.execute(select(Customer))
-    return result.scalars().all()
+    statement = select(Customer)
+    return db.scalars(statement).all()
 
 @router.get("/{customer_id}", response_model=CustomerResponse)
 def get_customer(customer_id: uuid.UUID, db:Session = Depends(get_db)):

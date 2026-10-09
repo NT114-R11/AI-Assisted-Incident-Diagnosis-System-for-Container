@@ -1,7 +1,8 @@
+import uuid
 from typing import TYPE_CHECKING
 from sqlalchemy import ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-
+from sqlalchemy.dialects.postgresql import UUID
 from app.database.database import Base
 
 if TYPE_CHECKING: 
@@ -11,12 +12,13 @@ if TYPE_CHECKING:
 class ShippingAddress(Base):
     __tablename__ ="shipping_addresses"
 
-    id: Mapped[int] = mapped_column(
-        Integer,
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
         primary_key=True,
-        index=True
+        default=uuid.uuid4
     )
-    customer_id: Mapped[int] = mapped_column(
+    customer_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
         ForeignKey("customers.customer_id"),
         nullable=False
     )

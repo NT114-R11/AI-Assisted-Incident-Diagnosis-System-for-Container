@@ -1,5 +1,5 @@
 from pydantic import BaseModel, ConfigDict, EmailStr
-
+import uuid
 class CustomerCreate(BaseModel):
     name: str
     email: EmailStr
@@ -11,7 +11,7 @@ class CustomerUpdate(BaseModel):
     phone: str | None = None
 
 class CustomerResponse(BaseModel):
-    customer_id: int
+    customer_id: uuid.UUID
     name: str
     email: str
     phone: str | None = None

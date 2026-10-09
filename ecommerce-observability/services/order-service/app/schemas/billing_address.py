@@ -1,5 +1,5 @@
 from pydantic import BaseModel, ConfigDict
-
+import uuid
 class BillingAddressCreate(BaseModel):
     address: str
     city: str
@@ -9,8 +9,8 @@ class BillingAddressUpdate(BaseModel):
     city: str | None = None
 
 class BillingAddressResponse(BaseModel):
-    id: int 
-    customer_id: int
+    id: uuid.UUID
+    customer_id: uuid.UUID
     address: str
     city: str
     model_config = ConfigDict(from_attributes=True)

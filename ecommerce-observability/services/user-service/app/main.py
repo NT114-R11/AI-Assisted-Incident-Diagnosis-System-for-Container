@@ -7,7 +7,7 @@ from app.database.database import Base, SessionLocal, engine
 from app.models import User, Authority
 from app.routers import auth, authority, user
 from app.security import hash_password
-
+from prometheus_fastapi_instrumentator import Instrumentator
 TITLE = "User Service"
 VERSION = "1.0.0"
 
@@ -65,7 +65,7 @@ app = FastAPI(
     version=VERSION,
     lifespan=lifespan
 )
-
+Instrumentator().instrument(app=app).expose(app)
 app.include_router(auth.router)
 app.include_router(user.router)
 app.include_router(authority.router)

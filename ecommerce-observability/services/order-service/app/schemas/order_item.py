@@ -1,11 +1,11 @@
 from decimal import Decimal
 from pydantic import BaseModel, ConfigDict
 
-
+import uuid
 class OrderItemResponse(BaseModel):
-    id: int
-    order_number: int
-    product_id: int
+    id: uuid.UUID
+    order_number: uuid.UUID
+    product_id: uuid.UUID
     quantity: int
     price: Decimal
 

@@ -1,9 +1,10 @@
+import uuid
 from typing import TYPE_CHECKING
 from datetime import datetime
 from decimal import Decimal
 from sqlalchemy import Integer, String,Numeric, DateTime, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-
+from sqlalchemy.dialects.postgresql import UUID
 from app.database.database import Base
 
 if TYPE_CHECKING:
@@ -15,17 +16,17 @@ if TYPE_CHECKING:
 class Order(Base):
     __tablename__ ="orders"
 
-    order_number: Mapped[int] = mapped_column(
-        Integer,
+    order_number: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
         primary_key=True,
-        index=True
+        default=uuid.uuid4
     )
-    customer_id: Mapped[int] = mapped_column(
+    customer_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("customers.customer_id"),
         nullable=False
     )
-    cart_id: Mapped[int] = mapped_column(
-        Integer,
+    cart_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
         nullable=False
     )
     total_price: Mapped[Decimal] = mapped_column(
@@ -38,18 +39,20 @@ class Order(Base):
         nullable=False,
         default=datetime.now
     )
-    shipping_address_id: Mapped[int] = mapped_column(
+    shipping_address_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
         ForeignKey("shipping_addresses.id"),
         nullable=False
     )
-    billing_address_id: Mapped[int] = mapped_column(
+    billing_address_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
         ForeignKey("billing_addresses.id"),
         nullable=False
     )
     status: Mapped[str] = mapped_column(
         String(50),
         nullable=False,
-        default="pending"
+        default="PENDING"
     )
     customer: Mapped["Customer"] = relationship(
         "Customer",

@@ -12,13 +12,13 @@ from app.routers.shipping_address import router as shipping_address_router
 from app.routers.billing_address import router as billing_address_router
 from app.routers.order import router as order_router
 
-
+from prometheus_fastapi_instrumentator import Instrumentator
 Base.metadata.create_all(bind=engine)
 TITLE = "Order Service"
 VERSION = "1.0.0"
 
 app = FastAPI(title=TITLE,version=VERSION)
-
+Instrumentator().instrument(app=app).expose(app)
 
 app.include_router(customer_router)
 app.include_router(shipping_address_router)

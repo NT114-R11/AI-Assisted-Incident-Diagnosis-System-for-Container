@@ -1,6 +1,7 @@
 services:
   postgres:
     image: postgres:16
+    env_file: .env
     container_name: ecommerce-postgres
 
     environment:
@@ -16,6 +17,7 @@ services:
   user-service:
     build:
       context: ./services/user-service
+    env_file: .env
     
     container_name: user-service
 
@@ -34,6 +36,7 @@ services:
   product-service:
     build:
       context: ./services/product-service
+    env_file: .env
 
     container_name: product-service
 
@@ -46,6 +49,7 @@ services:
   cart-service:
     build: 
       context: ./services/cart-service
+    env_file: .env
 
     container_name: cart-service
     
@@ -59,6 +63,7 @@ services:
   order-service:
     build:
       context: ./services/order-service
+    env_file: .env
     
     container_name: order-service
     

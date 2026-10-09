@@ -1,4 +1,5 @@
 import httpx
+import uuid
 from fastapi import APIRouter, Depends, HTTPException,status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -50,7 +51,7 @@ def get_customers(db: Session = Depends(get_db)):
     return result.scalars().all()
 
 @router.get("/{customer_id}", response_model=CustomerResponse)
-def get_customer(customer_id: int, db:Session = Depends(get_db)):
+def get_customer(customer_id: uuid.UUID, db:Session = Depends(get_db)):
     customer = db.get(Customer, customer_id)
 
     if customer is None:
@@ -58,7 +59,7 @@ def get_customer(customer_id: int, db:Session = Depends(get_db)):
     return customer
 
 @router.put("/{customer_id}", response_model=CustomerResponse)
-def update_customer(customer_id:int, data: CustomerUpdate, db:Session = Depends(get_db)):
+def update_customer(customer_id: uuid.UUID, data: CustomerUpdate, db:Session = Depends(get_db)):
     statement = select(Customer).where(Customer.customer_id == customer_id).with_for_update()
     customer = db.scalars(statement).first()
 
@@ -76,7 +77,7 @@ def update_customer(customer_id:int, data: CustomerUpdate, db:Session = Depends(
         raise HTTPException(status_code=409, detail="Email already exists!")
 
 @router.delete("/{customer_id}")
-def delete_customer(customer_id: int, db:Session = Depends(get_db)):
+def delete_customer(customer_id: uuid.UUID, db:Session = Depends(get_db)):
     statement = select(Customer).where(Customer.customer_id == customer_id).with_for_update()
     customer = db.scalars(statement).first()
     if customer is None:

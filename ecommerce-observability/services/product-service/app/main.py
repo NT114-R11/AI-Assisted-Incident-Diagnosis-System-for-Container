@@ -6,8 +6,8 @@ import uuid
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse, Response
-from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
+from fastapi.responses import JSONResponse
+from prometheus_fastapi_instrumentator import Instrumentator
 from sqlalchemy import text
 
 from app.database.database import Base, engine
@@ -15,19 +15,9 @@ from app.models.product import Product
 from app.routers.products import router as product_router
 from app.routers.seller import router as seller_router
 
+TITLE = "Product Service"
+VERSION = os.getenv("APP_VERSION", "1.0.0")
 logger = logging.getLogger("product-service")
-request_count = Counter(
-    "http_requests_total",
-    "HTTP requests processed by the service.",
-    ("service", "method", "handler", "status_code"),
-)
-request_duration = Histogram(
-    "http_request_duration_seconds",
-    "HTTP request duration in seconds.",
-    ("service", "method", "handler"),
-    buckets=(0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10),
-)
-probe_paths = {"/health", "/ready", "/metrics", "/openapi.json", "/docs", "/redoc"}
 request_id_pattern = re.compile(r"[A-Za-z0-9._:-]{1,128}\Z")
 
 
@@ -52,10 +42,11 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Product Service",
-    version=os.getenv("APP_VERSION", "1.0.0"),
+    title=TITLE,
+    version=VERSION,
     lifespan=lifespan,
 )
+
 
 @app.middleware("http")
 async def observe_request(request: Request, call_next):
@@ -63,7 +54,6 @@ async def observe_request(request: Request, call_next):
     if not request_id_pattern.fullmatch(request_id):
         request_id = str(uuid.uuid4())
     request.state.request_id = request_id
-    started_at = time.perf_counter()
     try:
         response = await call_next(request)
     except Exception:
@@ -73,21 +63,10 @@ async def observe_request(request: Request, call_next):
         )
 
     response.headers["X-Request-ID"] = request_id
-    if request.url.path not in probe_paths:
-        route = request.scope.get("route")
-        handler = getattr(route, "path", "unmatched")
-        request_count.labels(
-            "product-service", request.method, handler, str(response.status_code)
-        ).inc()
-        request_duration.labels("product-service", request.method, handler).observe(
-            time.perf_counter() - started_at
-        )
     return response
 
 
-@app.get("/metrics", include_in_schema=False)
-def metrics():
-    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+Instrumentator().instrument(app).expose(app, include_in_schema=False)
 
 app.include_router(product_router)
 app.include_router(seller_router)

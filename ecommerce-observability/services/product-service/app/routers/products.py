@@ -1,3 +1,4 @@
+import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -9,7 +10,8 @@ from app.models.seller import Seller
 from app.schemas.product import (
     ProductCreate,
     ProductUpdate,
-    ProductResponse
+    ProductResponse,
+    StockUpdate
 )
 
 router = APIRouter(
@@ -27,7 +29,7 @@ def get_products(page: int = Query(default=1, ge=1), # Defalt page is 1
     return products
 
 @router.get("/{product_id}", response_model=ProductResponse)
-def get_product(product_id: int, db: Session = Depends(get_db)):
+def get_product(product_id: uuid.UUID, db: Session = Depends(get_db)):
     product = db.get(Product, product_id)
 
     if product is None:
@@ -52,7 +54,7 @@ def create_product(product_data: ProductCreate, db:Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Failed to create product due to integrity error.")
 
 @router.put("/{product_id}", response_model= ProductResponse)
-def update_product(product_id: int, product_data: ProductUpdate, db: Session = Depends(get_db)):
+def update_product(product_id: uuid.UUID, product_data: ProductUpdate, db: Session = Depends(get_db)):
     statement = select(Product).where(Product.product_id == product_id).with_for_update()
     product = db.scalars(statement).first()
 
@@ -75,9 +77,45 @@ def update_product(product_id: int, product_data: ProductUpdate, db: Session = D
 
 
 @router.delete("/{product_id}", status_code=204)
-def delete_product(product_id:int, db:Session = Depends(get_db)):
+def delete_product(product_id: uuid.UUID, db: Session = Depends(get_db)):
     product = db.get(Product, product_id)
     if product is None:
         raise HTTPException(status_code=404, detail="Product not found!")
     db.delete(product)
     db.commit()
+
+
+# 1. API for deducting stock when an order is placed
+@router.patch("/{product_id}/deduct-stock")
+def deduct_stock(product_id: uuid.UUID, data: StockUpdate, db: Session = Depends(get_db)): # <--- Sửa int thành uuid.UUID
+    product = db.get(Product, product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    if product.quantity < data.quantity:
+        raise HTTPException(status_code=400, detail="Insufficient stock")
+    
+    product.quantity -= data.quantity
+    db.commit()
+    return {"message": "Stock deducted successfully", "remaining_quantity": product.quantity}
+
+
+# 2. API for restoring stock when an order is canceled
+@router.patch("/{product_id}/restore-stock")
+def restore_stock(product_id: uuid.UUID, data: StockUpdate, db: Session = Depends(get_db)): 
+    product = db.get(Product, product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    
+    product.quantity += data.quantity
+    db.commit()
+    return {"message": "Stock restored successfully", "current_quantity": product.quantity}
+
+
+# 3. Check product availability and price for a list of product IDs
+@router.get("/{product_id}")
+def get_product(product_id: uuid.UUID, db: Session = Depends(get_db)): 
+    product = db.get(Product, product_id)
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    return product

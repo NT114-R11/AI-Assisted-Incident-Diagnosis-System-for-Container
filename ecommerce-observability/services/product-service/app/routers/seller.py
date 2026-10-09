@@ -1,5 +1,6 @@
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+import uuid 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
@@ -48,7 +49,7 @@ def get_sellers(db: Session = Depends(get_db)):
     return db.scalars(statement).all()
 
 @router.get("/{seller_id}", response_model=SellerResponse)
-def get_seller(seller_id:int, db:Session = Depends(get_db)):
+def get_seller(seller_id: uuid.UUID, db: Session = Depends(get_db)):
     seller = db.get(Seller, seller_id)
 
     if not seller:
@@ -56,7 +57,7 @@ def get_seller(seller_id:int, db:Session = Depends(get_db)):
     return seller
 
 @router.put("/{seller_id}", response_model=SellerResponse)
-def update_seller(seller_id: int, data: SellerUpdate, db: Session = Depends(get_db)):
+def update_seller(seller_id: uuid.UUID, data: SellerUpdate, db: Session = Depends(get_db)):
     statement = select(Seller).where(Seller.id == seller_id).with_for_update()
 
     seller = db.scalars(statement).first()
@@ -74,7 +75,7 @@ def update_seller(seller_id: int, data: SellerUpdate, db: Session = Depends(get_
         raise HTTPException(status_code=400, detail="Fail to update seller")
 
 @router.delete("/{seller_id}")
-def delete_seller(seller_id:int, db:Session = Depends(get_db)):
+def delete_seller(seller_id: uuid.UUID, db: Session = Depends(get_db)):
     statement = select(Seller).where(Seller.id == seller_id).with_for_update()
     seller = db.scalars(statement).first()
 

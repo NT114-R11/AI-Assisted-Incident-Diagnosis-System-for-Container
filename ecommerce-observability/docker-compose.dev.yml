@@ -1,6 +1,7 @@
 services:
   postgres:
     image: postgres:16
+    env_file: .env
     container_name: ecommerce-postgres
     restart: unless-stopped
     environment:
@@ -21,6 +22,8 @@ services:
   user-service:
     build:
       context: ./services/user-service
+    env_file: .env
+    
     container_name: user-service
     restart: unless-stopped
     ports:
@@ -52,6 +55,8 @@ services:
   product-service:
     build:
       context: ./services/product-service
+    env_file: .env
+
     container_name: product-service
     restart: unless-stopped
     ports:
@@ -82,6 +87,8 @@ services:
   cart-service:
     build:
       context: ./services/cart-service
+    env_file: .env
+
     container_name: cart-service
     restart: unless-stopped
     ports:
@@ -112,6 +119,8 @@ services:
   order-service:
     build:
       context: ./services/order-service
+    env_file: .env
+    
     container_name: order-service
     restart: unless-stopped
     ports:

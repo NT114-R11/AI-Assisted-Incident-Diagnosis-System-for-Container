@@ -1,6 +1,7 @@
 from decimal import Decimal
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
+import uuid
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
@@ -15,6 +16,7 @@ router = APIRouter(prefix="/carts", tags=["Carts"])
 
 #Get product service 
 PRODUCT_SERVICE_URL = "http://product-service:8000"
+ORDER_SERVICE_URL = "http://order-service:8000"
 
 # A helper function calculate total price
 def recalculate_cart_total(cart: Cart, db:Session):
@@ -24,7 +26,19 @@ def recalculate_cart_total(cart: Cart, db:Session):
 
 # Create cart
 @router.post("/", response_model=CartResponse, status_code=201)
-def create_cart(cart_data:CartCreate, db: Session = Depends(get_db)):
+async def create_cart(cart_data:CartCreate, db: Session = Depends(get_db)):
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(f"{ORDER_SERVICE_URL}/customers/{cart_data.customer_id}", timeout=5.0)
+        except httpx.RequestError:
+            raise HTTPException(status_code=503, detail="Order Service unavailable")
+        
+        if response.status_code == 404:
+            raise HTTPException(status_code=404, detail="Customer not found")
+
+        if response.status_code != 200:
+            raise HTTPException(status_code=400, detail="Order-Service error")
+
     statement = select(Cart).where(Cart.customer_id == cart_data.customer_id)
 
     existing_cart = db.scalars(statement).first()
@@ -39,9 +53,24 @@ def create_cart(cart_data:CartCreate, db: Session = Depends(get_db)):
     except IntegrityError:
         db.rollback()
         raise HTTPException(status_code=409, detail="Customer already has a cart")
-# Load Cart
+
+
+
+# GET cart by customer_id or cart_id
+
+@router.get("/customer/{customer_id}", response_model=CartResponse)
+def get_cart_by_customer(customer_id: uuid.UUID, db: Session = Depends(get_db)):
+    statement = select(Cart).where(Cart.customer_id == customer_id)
+    cart = db.scalars(statement).first()
+    
+    if cart is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, 
+            detail=f"Cart not found for customer_id {customer_id}"
+        )
+    return cart
 @router.get("/{cart_id}", response_model=CartResponse)
-def get_cart(cart_id:int, db: Session = Depends(get_db)):
+def get_cart(cart_id: uuid.UUID, db: Session = Depends(get_db)):
     cart = db.get(Cart, cart_id)
     if cart is None:
         raise HTTPException(status_code=404, detail="Cart not found")
@@ -51,7 +80,7 @@ def get_cart(cart_id:int, db: Session = Depends(get_db)):
 
 # Add item to list
 @router.post("/{cart_id}/items", response_model=CartItemResponse, status_code=201)
-def add_cart_item(cart_id:int, item_data: CartItemCreate, request: Request, db:Session = Depends(get_db)):
+def add_cart_item(cart_id: uuid.UUID, item_data: CartItemCreate, db:Session = Depends(get_db)):
     statement = select(Cart).where(Cart.cart_id == cart_id).with_for_update()  # Choose the card which prepare to add an item
     cart = db.scalars(statement).first()
     if cart is None: # Check if there is no card, raise an error to announce user
@@ -107,8 +136,8 @@ def add_cart_item(cart_id:int, item_data: CartItemCreate, request: Request, db:S
         raise HTTPException(status_code=409, detail="Current request error on cart item")
         
 @router.put("/{cart_id}/items/{item_id}", response_model=CartItemResponse)
-def update_cart_item(cart_id:int, 
-                    item_id: int, 
+def update_cart_item(cart_id: uuid.UUID, 
+                    item_id: uuid.UUID, 
                     item_data: CartItemUpdate, 
                     request: Request,
                     db: Session = Depends(get_db)):
@@ -147,7 +176,7 @@ def update_cart_item(cart_id:int,
         raise HTTPException(status_code=400, detail="Failed to update item")
 # Delete item out of cart
 @router.delete("/{cart_id}/items/{item_id}")
-def delete_cart_item(cart_id:int, item_id:int,db:Session = Depends(get_db)):
+def delete_cart_item(cart_id: uuid.UUID, item_id: uuid.UUID, db: Session = Depends(get_db)):
     statement = select(Cart).where(Cart.cart_id == cart_id).with_for_update()
     cart = db.scalars(statement).first()
     if cart is None:
@@ -166,7 +195,7 @@ def delete_cart_item(cart_id:int, item_id:int,db:Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Failed to delete cart item")
 
 @router.delete("/{cart_id}")
-def delete_cart(cart_id: int, db: Session = Depends(get_db)):
+def delete_cart(cart_id: uuid.UUID, db: Session = Depends(get_db)):
     cart = db.get(Cart, cart_id)
     if cart is None:
         raise HTTPException(status_code=404, detail="Cart not found!")

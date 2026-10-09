@@ -1,3 +1,4 @@
+import uuid
 from pydantic import BaseModel, ConfigDict, EmailStr
 class SellerBase(BaseModel):
     user_email: EmailStr
@@ -14,5 +15,5 @@ class SellerUpdate(BaseModel):
     phone: str | None = None
 
 class SellerResponse(SellerBase):
-    id: int
+    id: uuid.UUID
     model_config =ConfigDict(from_attributes = True)

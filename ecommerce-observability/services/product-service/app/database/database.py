@@ -1,11 +1,8 @@
 import os
 
-from dotenv import load_dotenv
 from sqlalchemy import create_engine
 from sqlalchemy.engine import URL
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
-
-load_dotenv() 
 
 
 def build_database_url():
@@ -19,13 +16,12 @@ def build_database_url():
 
     return URL.create(
         drivername="postgresql+psycopg",
-        username=os.getenv("POSTGRES_USER", "admin"),
+        username=os.getenv("POSTGRES_USER"),
         password=password,
-        host=os.getenv("POSTGRES_HOST", os.getenv("DB_HOST", "localhost")),
-        port=int(os.getenv("POSTGRES_PORT", os.getenv("DB_PORT", "5432"))),
-        database=os.getenv("POSTGRES_DB", "ecommerce"),
+        host=os.getenv("DB_HOST"),
+        port=int(os.getenv("DB_PORT")),
+        database=os.getenv("POSTGRES_DB"),
     )
-
 
 engine = create_engine(
     build_database_url(),

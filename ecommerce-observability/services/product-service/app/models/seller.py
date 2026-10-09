@@ -1,6 +1,8 @@
+import uuid
 from typing import TYPE_CHECKING
 from sqlalchemy import Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column ,relationship 
+from sqlalchemy.dialects.postgresql import UUID
 from app.database.database import Base
 
 if TYPE_CHECKING:
@@ -8,10 +10,10 @@ if TYPE_CHECKING:
 class Seller(Base):
     __tablename__ = "sellers"
 
-    id: Mapped[int] = mapped_column(
-        Integer,
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
         primary_key=True,
-        autoincrement=True
+        default=uuid.uuid4
     )
     shop_name: Mapped[str] = mapped_column(
         String(50),

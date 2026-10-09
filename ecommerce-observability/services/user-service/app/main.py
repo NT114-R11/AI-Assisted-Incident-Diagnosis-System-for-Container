@@ -13,7 +13,7 @@ from app.database.database import Base, SessionLocal, engine
 from app.models import User, Authority
 from app.routers import auth, authority, user
 from app.security import hash_password
-
+from prometheus_fastapi_instrumentator import Instrumentator
 TITLE = "User Service"
 VERSION = os.getenv("APP_VERSION", "1.0.0")
 request_id_pattern = re.compile(r"[A-Za-z0-9._:-]{1,128}\Z")

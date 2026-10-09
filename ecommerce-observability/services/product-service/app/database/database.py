@@ -21,8 +21,8 @@ def build_database_url():
         drivername="postgresql+psycopg",
         username=os.getenv("POSTGRES_USER", "admin"),
         password=password,
-        host=os.getenv("DB_HOST", "localhost"),
-        port=int(os.getenv("DB_PORT", "5432")),
+        host=os.getenv("POSTGRES_HOST", os.getenv("DB_HOST", "localhost")),
+        port=int(os.getenv("POSTGRES_PORT", os.getenv("DB_PORT", "5432"))),
         database=os.getenv("POSTGRES_DB", "ecommerce"),
     )
 

@@ -1,12 +1,13 @@
 from decimal import Decimal
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from app.database.database import get_db
 from app.models.cart import Cart
 from app.models.cart_item import CartItem
+from app.request_context import build_forward_headers
 from app.schemas.cart import CartCreate, CartResponse
 from app.schemas.cart_item import (CartItemCreate, CartItemResponse, CartItemUpdate)
 
@@ -50,14 +51,18 @@ def get_cart(cart_id:int, db: Session = Depends(get_db)):
 
 # Add item to list
 @router.post("/{cart_id}/items", response_model=CartItemResponse, status_code=201)
-def add_cart_item(cart_id:int, item_data: CartItemCreate, db:Session = Depends(get_db)):
+def add_cart_item(cart_id:int, item_data: CartItemCreate, request: Request, db:Session = Depends(get_db)):
     statement = select(Cart).where(Cart.cart_id == cart_id).with_for_update()  # Choose the card which prepare to add an item
     cart = db.scalars(statement).first()
     if cart is None: # Check if there is no card, raise an error to announce user
         raise HTTPException(status_code=404, detail="Cart not found!")
     try:
         # Add product to cart process
-        response = httpx.get(f"{PRODUCT_SERVICE_URL}/products/{item_data.product_id}", timeout=5.0) # Take a product form produc-service,
+        response = httpx.get(
+            f"{PRODUCT_SERVICE_URL}/products/{item_data.product_id}",
+            headers=build_forward_headers(request),
+            timeout=5.0,
+        ) # Take a product form produc-service,
     except httpx.RequestError:
         raise HTTPException(status_code=503, detail="product-service gone wrong") # Announce product-service go down
     
@@ -105,6 +110,7 @@ def add_cart_item(cart_id:int, item_data: CartItemCreate, db:Session = Depends(g
 def update_cart_item(cart_id:int, 
                     item_id: int, 
                     item_data: CartItemUpdate, 
+                    request: Request,
                     db: Session = Depends(get_db)):
     statement = select(Cart).where(Cart.cart_id == cart_id).with_for_update()
     cart = db.scalars(statement).first()
@@ -115,7 +121,11 @@ def update_cart_item(cart_id:int,
     if cart_item is None or cart_item.cart_id != cart_id: #Check if the items is in the cart 
         raise HTTPException(status_code=404, detail="Cart item not found")
     try:
-        response = httpx.get(f"{PRODUCT_SERVICE_URL}/products/{cart_item.product_id}", timeout=5.0)
+        response = httpx.get(
+            f"{PRODUCT_SERVICE_URL}/products/{cart_item.product_id}",
+            headers=build_forward_headers(request),
+            timeout=5.0,
+        )
     except httpx.RequestError:
         raise HTTPException(status_code=503,detail="Product-serivce gone wrong")
     if response.status_code != 200:

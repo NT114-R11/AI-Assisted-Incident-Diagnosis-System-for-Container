@@ -1,7 +1,7 @@
 import httpx
 import logging
 from decimal import Decimal
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.exc import IntegrityError
@@ -12,6 +12,7 @@ from app.models.order_item import OrderItem
 from app.models.customer import Customer
 from app.models.shipping_address import ShippingAddress
 from app.models.billing_address import BillingAddress
+from app.request_context import build_forward_headers
 from app.schemas.order import (OrderCreate, OrderResponse, OrderUpdate)
 
 logger = logging.getLogger(__name__)
@@ -19,7 +20,7 @@ CART_SERVICE_URL = "http://cart-service:8000"
 router = APIRouter(prefix="/orders", tags=["Orders"])
 
 @router.post("/", response_model=OrderResponse)
-async def create_order (data: OrderCreate, db: Session = Depends(get_db)):
+async def create_order (data: OrderCreate, request: Request, db: Session = Depends(get_db)):
     #Check customer
     customer = db.get(Customer, data.customer_id)
     if not customer:
@@ -38,11 +39,12 @@ async def create_order (data: OrderCreate, db: Session = Depends(get_db)):
     if billing_address.customer_id != data.customer_id:
         raise HTTPException(status_code=400, detail="Billing address does not belong to customer")
     
+    headers = build_forward_headers(request)
     # Call to cart service
     async with httpx.AsyncClient() as client:
             
         try:
-            response = await client.get(f"{CART_SERVICE_URL}/carts/{data.cart_id}", timeout=5.0)
+            response = await client.get(f"{CART_SERVICE_URL}/carts/{data.cart_id}", headers=headers, timeout=5.0)
         except httpx.RequestError:
             raise HTTPException(status_code=503, detail="Cart Service unavailable")
         
@@ -84,7 +86,7 @@ async def create_order (data: OrderCreate, db: Session = Depends(get_db)):
     
     try:
         async with httpx.AsyncClient() as client:
-            await client.delete(f"{CART_SERVICE_URL}/carts/{data.cart_id}", timeout=5.0)
+            await client.delete(f"{CART_SERVICE_URL}/carts/{data.cart_id}", headers=headers, timeout=5.0)
     except httpx.RequestError as exc:
         logger.warning(f"Order {order.order_number} created, but failed to clear cart {data.cart_id}: {exc}")
     return order

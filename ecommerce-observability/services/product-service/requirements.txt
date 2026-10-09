@@ -1,6 +1,8 @@
 fastapi
 uvicorn[standard]
-sqlalchemy
+SQLAlchemy>=2.0
 psycopg[binary]
 pydantic
 email-validator>=2.0.0
+httpx
+prometheus-fastapi-instrumentator

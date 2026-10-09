@@ -1,6 +1,6 @@
 import httpx
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 import uuid 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
@@ -8,17 +8,21 @@ from sqlalchemy.exc import IntegrityError
 
 from app.database.database import get_db
 from app.models.seller import Seller
+from app.request_context import build_forward_headers
 from app.schemas.seller import (SellerCreate, SellerResponse, SellerUpdate)
 
 USER_SERVICE_URL = "http://user-service:8000"
 router = APIRouter(prefix="/sellers", tags=["Sellers"])
 
 @router.post("/", response_model=SellerResponse)
-async def create_seller(data: SellerCreate, db: Session = Depends(get_db)):
+async def create_seller(data: SellerCreate, request: Request, db: Session = Depends(get_db)):
     # Call user service for verify user
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.get(f"{USER_SERVICE_URL}/users/internal/{data.user_email}")
+            response = await client.get(
+                f"{USER_SERVICE_URL}/users/internal/{data.user_email}",
+                headers=build_forward_headers(request),
+            )
             if response.status_code == 404:
                 raise HTTPException(status_code= status.HTTP_404_NOT_FOUND, detail="User email does not exist in user-service")
             elif response.status_code != 200:

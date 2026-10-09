@@ -1,0 +1,40 @@
+groups:
+  - name: ecommerce-service-health
+    rules:
+      - alert: ServiceDown
+        expr: up == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Service is down"
+          description: "{{ $labels.job }} target {{ $labels.instance }} has been down for more than 2 minutes."
+
+      - alert: HighErrorRate
+        expr: sum(rate(http_requests_total{status=~"5.."}[5m])) by (job) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High error rate on {{ $labels.job }}"
+          description: "5xx error rate for {{ $labels.job }} has exceeded 0.1 req/s over the last 5 minutes."
+
+      - alert: HighLatency
+        expr: histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le, job)) > 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "P95 latency high on {{ $labels.job }}"
+          description: "95th percentile latency is above 1 second for {{ $labels.job }}."
+
+  - name: ecommerce-db-health
+    rules:
+      - alert: DatabaseUnavailable
+        expr: up == 0
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Database target unavailable"
+          description: "The PostgreSQL or app readiness target has been unavailable for more than 3 minutes."

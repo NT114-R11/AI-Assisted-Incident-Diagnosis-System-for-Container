@@ -1,8 +1,9 @@
-fastapi
-uvicorn[standard]
-sqlalchemy
-psycopg[binary]
-pydantic
-httpx
-email-validator>=2.0.0
-prometheus-fastapi-instrumentator
+fastapi==0.142.2
+uvicorn[standard]==0.35.0
+SQLAlchemy==2.0.44
+psycopg==3.2.12
+psycopg-binary==3.2.12
+pydantic==2.11.7
+httpx==0.28.1
+email-validator==2.3.0
+prometheus-fastapi-instrumentator==7.1.0

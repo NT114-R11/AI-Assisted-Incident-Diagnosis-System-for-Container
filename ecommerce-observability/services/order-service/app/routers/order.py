@@ -2,7 +2,9 @@ import httpx
 import uuid
 import logging
 from decimal import Decimal
-from fastapi import APIRouter, Depends, HTTPException, status
+
+from fastapi import APIRouter, Depends, HTTPException, Request,status
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.exc import IntegrityError
@@ -13,6 +15,7 @@ from app.models.order_item import OrderItem
 from app.models.customer import Customer
 from app.models.shipping_address import ShippingAddress
 from app.models.billing_address import BillingAddress
+from app.request_context import build_forward_headers
 from app.schemas.order import (OrderCreate, OrderResponse, OrderUpdate)
 
 logger = logging.getLogger(__name__)

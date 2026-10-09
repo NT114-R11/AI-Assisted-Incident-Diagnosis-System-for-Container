@@ -1,72 +1,122 @@
+x-db-url: &db-url
+  DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+
+x-healthcheck-http: &http-healthcheck
+  test:
+    - CMD
+    - python
+    - -c
+    - "import urllib.request; urllib.request.urlopen('http://localhost:8000/ready', timeout=3)"
+  interval: 15s
+  timeout: 5s
+  retries: 5
+  start_period: 20s
+
 services:
   postgres:
     image: postgres:16
     container_name: ecommerce-postgres
-
+    restart: unless-stopped
     environment:
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: 28012005
-      POSTGRES_DB: ecommerce
-
-
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    
-  
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - ecommerce-net
+
   user-service:
     build:
       context: ./services/user-service
-    
     container_name: user-service
-
+    restart: unless-stopped
     ports:
       - "8001:8000"
     environment:
-      JWT_SECRET_KEY: 91ezxkaejRgSPr4J6twBclO3TX56upTNLHfkqrZrlFr
+      <<: *db-url
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
       ACCESS_TOKEN_EXPIRE_MINUTES: 60
-
-      ADMIN_EMAIL: silverhd280105@gmail.com
-      ADMIN_PASSWORD: quenmatkhau123
-    
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      APP_VERSION: ${APP_VERSION:-1.0.0}
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
+    healthcheck: *http-healthcheck
+    networks:
+      - ecommerce-net
 
   product-service:
     build:
       context: ./services/product-service
-
     container_name: product-service
-
+    restart: unless-stopped
     ports:
       - "8002:8000"
-
+    environment:
+      <<: *db-url
+      USER_SERVICE_URL: http://user-service:8000
+      APP_VERSION: ${APP_VERSION:-1.0.0}
     depends_on:
-      - postgres
-      
-  cart-service:
-    build: 
-      context: ./services/cart-service
+      postgres:
+        condition: service_healthy
+      user-service:
+        condition: service_healthy
+    healthcheck: *http-healthcheck
+    networks:
+      - ecommerce-net
 
+  cart-service:
+    build:
+      context: ./services/cart-service
     container_name: cart-service
-    
+    restart: unless-stopped
     ports:
       - "8003:8000"
+    environment:
+      <<: *db-url
+      APP_VERSION: ${APP_VERSION:-1.0.0}
+      PRODUCT_SERVICE_URL: http://product-service:8000
     depends_on:
-      - postgres
-      - product-service
-      
-  
+      postgres:
+        condition: service_healthy
+      product-service:
+        condition: service_healthy
+    healthcheck: *http-healthcheck
+    networks:
+      - ecommerce-net
+
   order-service:
     build:
       context: ./services/order-service
-    
     container_name: order-service
-    
+    restart: unless-stopped
     ports:
       - "8004:8000"
+    environment:
+      <<: *db-url
+      CART_SERVICE_URL: http://cart-service:8000
+      PRODUCT_SERVICE_URL: http://product-service:8000
+      APP_VERSION: ${APP_VERSION:-1.0.0}
     depends_on:
-      - postgres
-      - cart-service
+      postgres:
+        condition: service_healthy
+      cart-service:
+        condition: service_healthy
+    healthcheck: *http-healthcheck
+    networks:
+      - ecommerce-net
+
+networks:
+  ecommerce-net:
+    driver: bridge
 
 volumes:
   postgres_data:

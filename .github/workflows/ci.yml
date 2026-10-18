@@ -4,9 +4,13 @@ on:
   push:
     branches:
       - main
+      - master
+      - observability
   pull_request:
     branches:
       - main
+      - master
+      - observability
 
 jobs:
   test:
@@ -39,7 +43,7 @@ jobs:
 
     defaults:
       run:
-        working-directory: services/${{ matrix.service }}
+        working-directory: ecommerce-observability/services/${{ matrix.service }}
 
     env:
       POSTGRES_USER: ecommerce
@@ -57,7 +61,7 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-          cache-dependency-path: services/${{ matrix.service }}/requirements.txt
+          cache-dependency-path: ecommerce-observability/services/${{ matrix.service }}/requirements.txt
 
       - name: Install dependencies
         run: |

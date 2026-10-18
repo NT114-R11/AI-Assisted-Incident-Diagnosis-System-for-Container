@@ -30,13 +30,13 @@ jobs:
       postgres:
         image: postgres:16
         env:
-          POSTGRES_USER: ecommerce
-          POSTGRES_PASSWORD: ecommerce_password
-          POSTGRES_DB: ecommerce
+          POSTGRES_USER: test_admin
+          POSTGRES_PASSWORD: test_password_2026
+          POSTGRES_DB: ecommerce_test
         ports:
           - 5432:5432
         options: >-
-          --health-cmd="pg_isready -U ecommerce -d ecommerce"
+          --health-cmd="pg_isready -U test_admin -d ecommerce_test"
           --health-interval=5s
           --health-timeout=5s
           --health-retries=10
@@ -46,11 +46,7 @@ jobs:
         working-directory: ecommerce-observability/services/${{ matrix.service }}
 
     env:
-      POSTGRES_USER: ecommerce
-      POSTGRES_PASSWORD: ecommerce_password
-      POSTGRES_DB: ecommerce
-      DB_HOST: localhost
-      DB_PORT: 5432
+      DATABASE_URL: postgresql+psycopg://test_admin:test_password_2026@localhost:5432/ecommerce_test
 
     steps:
       - name: Checkout repository
@@ -70,8 +66,8 @@ jobs:
 
       - name: Create test database tables
         run: |
-          python tests/setup_test_db.py
+          python -m tests.setup_test_db
 
       - name: Run tests
         run: |
-          pytest -v
+          python -m pytest -v

@@ -1,0 +1,53 @@
+name: Docker Build & Push
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
+
+jobs:
+  build-and-push:
+    name: Build & Push ${{ matrix.service }}
+    if: >
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main'
+
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - user-service
+          - product-service
+          - cart-service
+          - order-service
+
+    steps:
+      - name: Checkout tested commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: ecommerce-observability/services/${{ matrix.service }}
+          file: ecommerce-observability/services/${{ matrix.service }}/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/nt114-r11/ecommerce-${{ matrix.service }}:${{ github.event.workflow_run.head_sha }}
+            ghcr.io/nt114-r11/ecommerce-${{ matrix.service }}:main

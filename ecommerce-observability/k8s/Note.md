@@ -219,6 +219,43 @@ kubectl apply -k k8s/overlays/local
 ```
 
 ## Cài NGINX Ingress Controller cho Kind
+
+- Đảm bảo trong file kind-config.yaml có:
+```
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+
+name: ecommerce-local
+
+nodes:
+  - role: control-plane
+
+  - role: worker
+    extraPortMappings:
+      - containerPort: 80
+        hostPort: 80
+        protocol: TCP
+      - containerPort: 443
+        hostPort: 443
+        protocol: TCP
+
+  - role: worker
+```
+- Kiểm tra Internal IP của worker (not worker2) nơi được map host 80/443. Xác định IP và ghi nhớ nó.
+```
+kubectl get nodes -o wide
+```
+
+- Đánh dấu worker dành cho Ingress
+```
+kubectl label node ecommerce-local-worker ingress-ready=true
+```
+
+- Verify
+```
+kubectl get nodes --show-labels
+```
+
 Dùng manifest chính thức dành cho Kind
 ```
 kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
@@ -226,17 +263,49 @@ kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main
 
 Verify
 ```
+kubectl get pods -n ingress-nginx -o wide
 kubectl get pods -n ingress-nginx
 kubectl get svc -n ingress-nginx
 ```
 
+- Trường hợp ingress-nginx-controller → ecommerce-local-worker2 nằm ở worker2. Để giải quyết ta ép ingress controller xuống worker
+```
+kubectl patch deployment ingress-nginx-controller \
+  -n ingress-nginx \
+  --type='strategic' \
+  -p '{"spec":{"template":{"spec":{"nodeSelector":{"kubernetes.io/os":"linux","ingress-ready":"true"}}}}}'
+```
+- Khi nào thường dùng lệnh này?
+Ta thấy lệnh này xuất hiện rất nhiều trong tài liệu hướng dẫn cài đặt NGINX Ingress Controller trên môi trường local (đặc biệt là Kind - Kubernetes in Docker).
+
+Trong cụm Kind, nếu bạn muốn dùng một node cụ thể làm "cổng" nhận traffic từ bên ngoài vào qua cổng 80/443, bạn phải gắn nhãn ingress-ready=true cho node đó và dùng lệnh trên để ép NGINX Ingress Controller chạy đúng lên node đó.
+
 Kiểm tra IngressClass
 ```
+kubectl get pods -n ingress-nginx -o wide
 kubectl get ingressclass
 ```
 NAME  |  CONTROLLER|
 | --- | --- |
 nginx|   k8s.io/ingress-nginx|
+
+- Testing
+```
+curl -i http://localhost:80
+```
+404 Not Found là đúng tại chưa có cấu hình thông tin gì về port này sất.
+
+- Cuối cùng apply Ingress và test một lần nữa với:
+```
+kubectl apply -f k8s/overlays/local/ingress.yaml
+```
+
+```
+curl http://localhost/api/users/health
+curl http://localhost/api/products/health
+curl http://localhost/api/carts/health
+curl http://localhost/api/orders/health
+```
 
 ## Tạm dừng container mà không xóa dữ liệu
 
@@ -246,3 +315,46 @@ docker stop ecommerce-local-control-plane ecommerce-local-worker ecommerce-local
 docker start ecommerce-local-control-plane ecommerce-local-worker ecommerce-local-worker2
 ```
 
+
+
+```
+docker build -t ecommerce/user-service:local services/user-service
+docker build -t ecommerce/product-service:local services/product-service
+docker build -t ecommerce/cart-service:local services/cart-service
+docker build -t ecommerce/order-service:local services/order-service
+```
+```
+kind load docker-image ecommerce/user-service:local --name ecommerce-local
+kind load docker-image ecommerce/product-service:local --name ecommerce-local
+kind load docker-image ecommerce/cart-service:local --name ecommerce-local
+kind load docker-image ecommerce/order-service:local --name ecommerce-local
+```
+
+```
+kubectl describe ingress ecommerce-ingress -n ecommerce
+```
+
+
+
+
+Pause to save ram
+```
+docker stop ecommerce-local-control-plane ecommerce-local-worker ecommerce-local-worker2
+```
+
+Start to continue
+```
+docker start ecommerce-local-control-plane ecommerce-local-worker ecommerce-local-worker2
+```
+
+## Kiểm tra HTTP giữa các service
+```
+kubectl exec -n ecommerce deployment/order-service -- \
+  python -c "import urllib.request; print(urllib.request.urlopen('http://cart-service:8003/health').read().decode())"
+
+kubectl exec -n ecommerce deployment/order-service -- \
+  python -c "import urllib.request; print(urllib.request.urlopen('http://user-service:8001/health').read().decode())"
+
+kubectl exec -n ecommerce deployment/cart-service -- \
+  python -c "import urllib.request; print(urllib.request.urlopen('http://product-service:8002/health').read().decode())"
+```

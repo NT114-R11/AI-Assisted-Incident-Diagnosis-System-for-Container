@@ -17,6 +17,7 @@ from app.routers.seller import router as seller_router
 
 TITLE = "Product Service"
 VERSION = os.getenv("APP_VERSION", "1.0.0")
+ROOT_PATH = os.getenv("ROOT_PATH", "")
 logger = logging.getLogger("product-service")
 request_id_pattern = re.compile(r"[A-Za-z0-9._:-]{1,128}\Z")
 
@@ -44,6 +45,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=TITLE,
     version=VERSION,
+    root_path=ROOT_PATH,
     lifespan=lifespan,
 )
 

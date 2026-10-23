@@ -11,7 +11,7 @@ from app.models.seller import Seller
 from app.request_context import build_forward_headers
 from app.schemas.seller import (SellerCreate, SellerResponse, SellerUpdate)
 
-USER_SERVICE_URL = "http://user-service:8000"
+USER_SERVICE_URL = "http://user-service:8001"
 router = APIRouter(prefix="/sellers", tags=["Sellers"])
 
 @router.post("/", response_model=SellerResponse)

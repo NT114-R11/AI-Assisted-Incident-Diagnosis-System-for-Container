@@ -11,7 +11,7 @@ from app.schemas.customer import (CustomerCreate, CustomerResponse, CustomerUpda
 
 router = APIRouter(prefix="/customers", tags=["Customers"])
 
-USER_SERVICE_URL = "http://user-service:8000"
+USER_SERVICE_URL = "http://user-service:8001"
 #Create a customer
 @router.post("/", response_model=CustomerResponse)
 async def create_customer(customer: CustomerCreate, db: Session = Depends(get_db)):

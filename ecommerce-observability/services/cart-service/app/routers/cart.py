@@ -15,8 +15,8 @@ from app.schemas.cart_item import (CartItemCreate, CartItemResponse, CartItemUpd
 router = APIRouter(prefix="/carts", tags=["Carts"])
 
 #Get product service 
-PRODUCT_SERVICE_URL = "http://product-service:8000"
-ORDER_SERVICE_URL = "http://order-service:8000"
+PRODUCT_SERVICE_URL = "http://product-service:8002"
+ORDER_SERVICE_URL = "http://order-service:8004"
 
 # A helper function calculate total price
 def recalculate_cart_total(cart: Cart, db: Session):

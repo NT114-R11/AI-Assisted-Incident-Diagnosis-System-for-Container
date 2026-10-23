@@ -19,8 +19,8 @@ from app.request_context import build_forward_headers
 from app.schemas.order import (OrderCreate, OrderResponse, OrderUpdate)
 
 logger = logging.getLogger(__name__)
-CART_SERVICE_URL = "http://cart-service:8000"
-PRODUCT_SERVICE_URL = "http://product-service:8000"
+CART_SERVICE_URL = "http://cart-service:8003"
+PRODUCT_SERVICE_URL = "http://product-service:8002"
 router = APIRouter(prefix="/orders", tags=["Orders"])
 
 # Helper Function: Dealing with stock rollback in case of order creation failure

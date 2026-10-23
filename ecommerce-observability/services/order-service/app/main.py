@@ -25,6 +25,8 @@ from app.routers.order import router as order_router
 SERVICE_NAME = "order-service"
 TITLE = "Order Service"
 VERSION = os.getenv("APP_VERSION", "1.0.0")
+ROOT_PATH = os.getenv("ROOT_PATH", "")
+
 
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO"),
@@ -58,7 +60,7 @@ async def lifespan(app: FastAPI):
     engine.dispose()
 
 
-app = FastAPI(title=TITLE, version=VERSION, lifespan=lifespan)
+app = FastAPI(title=TITLE, version=VERSION,root_path=ROOT_PATH, lifespan=lifespan)
 Instrumentator().instrument(app).expose(app, include_in_schema=False)
 
 

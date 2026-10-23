@@ -16,6 +16,7 @@ from app.security import hash_password
 from prometheus_fastapi_instrumentator import Instrumentator
 TITLE = "User Service"
 VERSION = os.getenv("APP_VERSION", "1.0.0")
+ROOT_PATH = os.getenv("ROOT_PATH", "")
 request_id_pattern = re.compile(r"[A-Za-z0-9._:-]{1,128}\Z")
 logging.basicConfig(
     level=os.getenv("LOG_LEVEL", "INFO"),
@@ -92,6 +93,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=TITLE,
     version=VERSION,
+    root_path=ROOT_PATH,
     lifespan=lifespan
 )
 

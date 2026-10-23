@@ -49,8 +49,10 @@ async def lifespan(app: FastAPI):
 
 TITLE = "Cart Service"
 VERSION = os.getenv("APP_VERSION", "1.0.0")
+ROOT_PATH = os.getenv("ROOT_PATH", "")
 
-app = FastAPI(title=TITLE, version=VERSION, lifespan=lifespan)
+
+app = FastAPI(title=TITLE, version=VERSION,root_path=ROOT_PATH, lifespan=lifespan)
 
 @app.middleware("http")
 async def observe_request(request: Request, call_next):

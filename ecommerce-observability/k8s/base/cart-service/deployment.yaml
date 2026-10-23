@@ -19,7 +19,9 @@ spec:
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8000
-
+          env:
+            - name: ROOT_PATH
+              value: "/api/carts"
           envFrom:
             - configMapRef:
                 name: ecommerce-config

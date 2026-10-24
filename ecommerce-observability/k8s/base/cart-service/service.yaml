@@ -3,6 +3,10 @@ kind: Service
 metadata:
   name: cart-service
   namespace: ecommerce
+  annotations: 
+    prometheus.io/scrape: "true"
+    prometheus.io/path: "/metrics"
+    prometheus.io/port: "8003"
 spec:
   selector:
     app: cart-service

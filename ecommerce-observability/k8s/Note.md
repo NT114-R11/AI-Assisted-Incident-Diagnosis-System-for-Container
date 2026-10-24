@@ -24,7 +24,7 @@ Sau khi namespace xong, sẽ triển khai PostgreSQL vào overlays/local/, đún
 
 - Apply the namespcae
 ```
-kubectl apply -f base/namespace.yaml
+kubectl apply -f k8s/base/namespace.yaml
 ```
 
 - Verify
@@ -147,6 +147,12 @@ Secret có đặc điểm tương tự như ConfigMap, nhưng được thiết k
 - Áp dụng cấu hình
 ```
 kubectl apply -f k8s/overlays/local/secret.yaml
+```
+```
+kubectl create secret generic ecommerce-secret \
+  -n ecommerce \
+  --from-literal=ADMIN_EMAIL='silverhd280105@gmail.com' \
+  --from-literal=ADMIN_PASSWORD='quenmatkhau123'
 ```
 - Verify 
 
@@ -307,14 +313,6 @@ curl http://localhost/api/carts/health
 curl http://localhost/api/orders/health
 ```
 
-## Tạm dừng container mà không xóa dữ liệu
-
-```
-docker stop ecommerce-local-control-plane ecommerce-local-worker ecommerce-local-worker2
-#Khi nào muốn bật lại:
-docker start ecommerce-local-control-plane ecommerce-local-worker ecommerce-local-worker2
-```
-
 
 
 ```
@@ -357,4 +355,36 @@ kubectl exec -n ecommerce deployment/order-service -- \
 
 kubectl exec -n ecommerce deployment/cart-service -- \
   python -c "import urllib.request; print(urllib.request.urlopen('http://product-service:8002/health').read().decode())"
+```
+
+
+
+```
+
+kubectl rollout restart deployment/user-service -n ecommerce
+kubectl rollout restart deployment/product-service -n ecommerce
+kubectl rollout restart deployment/cart-service -n ecommerce
+kubectl rollout restart deployment/order-service -n ecommerce
+
+```
+
+
+## Tạm dừng container mà không xóa dữ liệu
+
+- Kiểm tra trước:
+```
+kind get clusters
+```
+- Sau đó dừng toàn bộ container của cluster:
+```
+docker stop $(docker ps -q --filter "label=io.x-k8s.kind.cluster=ecommerce-local")
+```
+
+- Khi nào muốn bật lại:
+```
+docker start $(docker ps -aq --filter "label=io.x-k8s.kind.cluster=ecommerce-local")
+```
+- Verify
+```
+kubectl get nodes
 ```

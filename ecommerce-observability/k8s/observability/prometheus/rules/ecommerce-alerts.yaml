@@ -1,0 +1,98 @@
+groups:
+  - name: ecommerce-service-alerts
+    rules:
+
+      - alert: EcommerceServiceDown
+        expr: up{job="ecommerce-services"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "E-Commerce service is down"
+          description: "{{ $labels.service }} is unavailable."
+      
+      - alert: EcommerceUserServiceMissing
+        expr: |
+          absent(up{job="ecommerce-services", service="user-service"})
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "User Service target is missing"
+          description: "user-service has no active Prometheus target."
+
+      - alert: EcommerceProductServiceMissing
+        expr: |
+          absent(up{job="ecommerce-services", service="product-service"})
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Product Service target is missing"
+          description: "product-service has no active Prometheus target."
+
+      - alert: EcommerceCartServiceMissing
+        expr: |
+          absent(up{job="ecommerce-services", service="cart-service"})
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Cart Service target is missing"
+          description: "cart-service has no active Prometheus target."
+
+      - alert: EcommerceOrderServiceMissing
+        expr: |
+          absent(up{job="ecommerce-services", service="order-service"})
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Order Service target is missing"
+          description: "order-service has no active Prometheus target."
+
+      - alert: EcommerceHighErrorRate
+        expr: |
+          (
+            sum by (service) (
+              rate(
+                http_requests_total{
+                  job="ecommerce-services",
+                  status=~"4xx|5xx"
+                }[5m]
+              )
+            )
+            /
+            sum by (service) (
+              rate(
+                http_requests_total{
+                  job="ecommerce-services"
+                }[5m]
+              )
+            )
+          ) > 0.05
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High HTTP error rate"
+          description: "{{ $labels.service }} has an HTTP error rate above 5%."
+
+      - alert: EcommerceHighLatency
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (service, le) (
+              rate(
+                http_request_duration_highr_seconds_bucket{
+                  job="ecommerce-services"
+                }[5m]
+              )
+            )
+          ) > 1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High HTTP latency"
+          description: "{{ $labels.service }} has P95 latency above 1 second."

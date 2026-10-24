@@ -1,0 +1,122 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: ecommerce
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      containers:
+        - name: grafana
+          image: grafana/grafana:12.2.0
+          ports:
+            - containerPort: 3000
+
+          env:
+            - name: GF_SECURITY_ADMIN_USER
+              value: admin
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              value: admin
+
+          volumeMounts:
+            # Prometheus datasource
+            - name: datasources
+              mountPath: /etc/grafana/provisioning/datasources
+
+            # Dashboard provider
+            - name: dashboard-provider
+              mountPath: /etc/grafana/provisioning/dashboards
+
+            # Dashboard JSON files
+            - name: dashboards
+              mountPath: /var/lib/grafana/dashboards
+
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+
+      volumes:
+        # Prometheus datasource
+        - name: datasources
+          configMap:
+            name: grafana-datasources
+
+        # Dashboard provider configuration
+        - name: dashboard-provider
+          configMap:
+            name: grafana-dashboard-provider
+
+        # Dashboard JSON
+        - name: dashboards
+          configMap:
+            name: grafana-dashboards
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  namespace: ecommerce
+spec:
+  selector:
+    app: grafana
+  ports:
+    - port: 3000
+      targetPort: 3000
+  type: ClusterIP
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasources
+  namespace: ecommerce
+data:
+  prometheus.yaml: |
+    apiVersion: 1
+
+    datasources:
+      - name: Prometheus
+        uid: prometheus
+        type: prometheus
+        access: proxy
+        url: http://prometheus:9090
+        isDefault: true
+        editable: false
+      - name: Loki
+        uid: loki
+        type: loki
+        access: proxy
+        url: http://loki:3100
+        editable: false
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-provider
+  namespace: ecommerce
+data:
+  dashboards.yaml: |
+    apiVersion: 1
+
+    providers:
+      - name: ecommerce
+        orgId: 1
+        folder: E-Commerce
+        type: file
+        disableDeletion: false
+        editable: false
+        options:
+          path: /var/lib/grafana/dashboards

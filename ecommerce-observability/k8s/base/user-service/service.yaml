@@ -3,6 +3,10 @@ kind: Service
 metadata:
   name: user-service
   namespace: ecommerce
+  annotations: 
+    prometheus.io/scrape: "true"
+    prometheus.io/path: "/metrics"
+    prometheus.io/port: "8001"
 spec:
   selector:
     app: user-service
@@ -10,3 +14,4 @@ spec:
     - port: 8001
       targetPort: 8000
   type: ClusterIP
+

@@ -16,7 +16,7 @@ spec:
       containers:
         - name: order-service
           image: ecommerce/order-service:local
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Never
           ports:
             - containerPort: 8000
           env:

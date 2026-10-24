@@ -3,6 +3,10 @@ kind: Service
 metadata:
   name: order-service
   namespace: ecommerce
+  annotations: 
+    prometheus.io/scrape: "true"
+    prometheus.io/path: "/metrics"
+    prometheus.io/port: "8004"
 spec:
   selector:
     app: order-service

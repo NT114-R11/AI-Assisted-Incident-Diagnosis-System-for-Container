@@ -18,7 +18,7 @@ spec:
       containers:
         - name: user-service
           image: ecommerce/user-service:local
-          imagePullPolicy: Never
+          imagePullPolicy: IfNotPresent
 
           ports:
             - containerPort: 8000

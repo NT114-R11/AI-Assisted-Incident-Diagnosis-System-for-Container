@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-diagnosis-service
+  namespace: ecommerce
+  labels:
+    app: ai-diagnosis-service
+spec:
+  replicas: 1
+
+  selector:
+    matchLabels:
+      app: ai-diagnosis-service
+
+  template:
+    metadata:
+      labels:
+        app: ai-diagnosis-service
+
+    spec:
+      serviceAccountName: ai-diagnosis
+
+      containers:
+        - name: ai-diagnosis-service
+          image: ecommerce/ai-diagnosis-service:local
+          imagePullPolicy: IfNotPresent
+
+          ports:
+            - containerPort: 8000
+              name: http
+
+          env:
+            - name: PROMETHEUS_URL
+              value: "http://prometheus:9090"
+
+            - name: LOKI_URL
+              value: "http://loki:3100"
+
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 5

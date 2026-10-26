@@ -8,3 +8,4 @@ resources:
   - product-service
   - cart-service
   - order-service
+  - ai-diagnosis-service

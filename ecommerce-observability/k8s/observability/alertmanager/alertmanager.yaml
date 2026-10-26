@@ -8,7 +8,7 @@ data:
       resolve_timeout: 5m
 
     route:
-      receiver: default
+      receiver: ai-diagnosis
       group_by:
         - alertname
         - service
@@ -17,6 +17,11 @@ data:
       repeat_interval: 4h
 
     receivers:
+      - name: ai-diagnosis
+        webhook_configs:
+          - url: "http://ai-diagnosis-service:8010/webhook/alertmanager"
+            send_resolved: true
+
       - name: default
 
 ---

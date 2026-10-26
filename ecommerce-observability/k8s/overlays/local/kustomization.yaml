@@ -5,6 +5,11 @@ namespace: ecommerce
 
 resources:
   - ../../base
+  - ../../observability/prometheus
+  - ../../observability/alertmanager
+  - ../../observability/loki
+  - ../../observability/alloy
+  - ../../observability/grafana
   - postgres.yaml
   - secret.yaml
   - ingress.yaml

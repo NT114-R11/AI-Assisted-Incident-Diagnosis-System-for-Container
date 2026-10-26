@@ -160,69 +160,6 @@ kubectl create secret generic ecommerce-secret \
 kubectl get secret -n ecommerce
 ```
 
-# Cấu hình cho các service (Deployment, Kustomization, Service)
-
-[`Deployment`](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/) quản lý một tập hợp các Pod để chạy khối lượng công việc của ứng dụng, thường là các ứng dụng không duy trì trạng thái (stateless).
-Deployment cung cấp cơ chế cập nhật theo phương thức khai báo (declarative updates) cho các Pod và ReplicaSet.
-
-Bạn mô tả trạng thái mong muốn trong một Deployment, và Deployment Controller sẽ điều chỉnh trạng thái thực tế sao cho khớp với trạng thái mong muốn đó theo một tốc độ được kiểm soát. Bạn có thể thiết lập các Deployment để tạo mới các ReplicaSet, hoặc loại bỏ các Deployment hiện có và tiếp quản toàn bộ tài nguyên của chúng thông qua các Deployment mới. 
-
-[`Kustomization`](https://kubernetes.io/docs/tasks/manage-kubernetes-objects/kustomization/)là một công cụ dùng để tùy chỉnh các cấu hình Kubernetes. Công cụ này cung cấp các tính năng sau để quản lý các tệp cấu hình ứng dụng:
-
-- tạo tài nguyên từ các nguồn khác nhau
-- thiết lập các trường chung (cross-cutting fields) cho các tài nguyên
-- kết hợp và tùy chỉnh các tập hợp tài nguyên
-- Tạo tài nguyên
-ConfigMap và Secret lưu trữ các cấu hình hoặc dữ liệu nhạy cảm được sử dụng bởi các đối tượng Kubernetes khác, chẳng hạn như Pod. Nguồn dữ liệu gốc (source of truth) của ConfigMap hoặc Secret thường nằm bên ngoài cụm (cluster), ví dụ như tệp .properties hoặc tệp khóa SSH. Kustomize cung cấp các tính năng `secretGenerator` và `configMapGenerator` để tạo Secret và ConfigMap từ các tệp tin hoặc các giá trị trực tiếp (literals). 
-
-Các [`Service`](https://kubernetes.io/docs/concepts/services-networking/service/) trong Kubernetes
-Service API, một thành phần của Kubernetes, là một lớp trừu tượng giúp bạn công khai (expose) các nhóm Pod thông qua mạng. Mỗi đối tượng Service định nghĩa một tập hợp logic các điểm cuối (endpoint) — thường là các Pod — cùng với chính sách quy định cách thức truy cập vào các Pod đó.
-
-Ví dụ, hãy xem xét một hệ thống backend xử lý hình ảnh không lưu trạng thái (stateless) đang chạy với 3 bản sao (replica). Các bản sao này có thể thay thế cho nhau; các thành phần frontend không cần quan tâm cụ thể mình đang kết nối với backend nào. Ngay cả khi các Pod thực tế tạo nên tập hợp backend đó thay đổi, các client ở phía frontend cũng không cần phải biết về sự thay đổi này, cũng như không cần tự mình theo dõi danh sách các backend hiện có.
-
-
-- Nếu lỗi với kind cần tạo lại đây là các lệnh để áp dụng lại cấu hình trước đó
-```
-kubectl apply -f k8s/base/namespace.yaml
-kubectl apply -f k8s/overlays/local/postgres.yaml
-kubectl apply -f k8s/base/configmap.yaml
-kubectl apply -f k8s/overlays/local/secret.yaml
-```
-## user-service (Các service khác làm tương tự)
-
-- Build image user-service để đảm bảo đã có container này trước
-
-```
-docker build -t ecommerce/user-service:local services/user-service
-```
-
-- verify
-```
-docker images | grep ecommerce/user-service
-```
-
-- Load image vào Kind
-```
-kind load docker-image ecommerce/user-service:local --name ecommerce-local
-```
-- verify
-```
-docker exec ecommerce-local-control-plane crictl images | grep ecommerce/user-service
-```
-- Apply User Service + Verify
-```
-kubectl apply -k k8s/base/user-service
-kubectl get pods -n ecommerce
-```
-- kiểm tra /health và /ready
-```
-kubectl port-forward -n ecommerce svc/user-service 8001:8001
-```
-
-Sau khi tạo các service xong không cần phải apply từng service nữa chỉ cần dùng thư mục chứa các configuaration để mà apply nhé~
-```
-kubectl apply -k k8s/overlays/local
-```
 
 ## Cài NGINX Ingress Controller cho Kind
 
@@ -314,18 +251,89 @@ curl http://localhost/api/orders/health
 ```
 
 
+- Nếu lỗi với kind cần tạo lại đây là các lệnh để áp dụng lại cấu hình trước đó
+```
+kubectl apply -f k8s/base/namespace.yaml
+kubectl apply -f k8s/overlays/local/postgres.yaml
+kubectl apply -f k8s/base/configmap.yaml
+kubectl apply -f k8s/overlays/local/secret.yaml
+```
+
+
+# Cấu hình cho các service (Deployment, Kustomization, Service)
+
+[`Deployment`](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/) quản lý một tập hợp các Pod để chạy khối lượng công việc của ứng dụng, thường là các ứng dụng không duy trì trạng thái (stateless).
+Deployment cung cấp cơ chế cập nhật theo phương thức khai báo (declarative updates) cho các Pod và ReplicaSet.
+
+Bạn mô tả trạng thái mong muốn trong một Deployment, và Deployment Controller sẽ điều chỉnh trạng thái thực tế sao cho khớp với trạng thái mong muốn đó theo một tốc độ được kiểm soát. Bạn có thể thiết lập các Deployment để tạo mới các ReplicaSet, hoặc loại bỏ các Deployment hiện có và tiếp quản toàn bộ tài nguyên của chúng thông qua các Deployment mới. 
+
+[`Kustomization`](https://kubernetes.io/docs/tasks/manage-kubernetes-objects/kustomization/)là một công cụ dùng để tùy chỉnh các cấu hình Kubernetes. Công cụ này cung cấp các tính năng sau để quản lý các tệp cấu hình ứng dụng:
+
+- tạo tài nguyên từ các nguồn khác nhau
+- thiết lập các trường chung (cross-cutting fields) cho các tài nguyên
+- kết hợp và tùy chỉnh các tập hợp tài nguyên
+- Tạo tài nguyên
+ConfigMap và Secret lưu trữ các cấu hình hoặc dữ liệu nhạy cảm được sử dụng bởi các đối tượng Kubernetes khác, chẳng hạn như Pod. Nguồn dữ liệu gốc (source of truth) của ConfigMap hoặc Secret thường nằm bên ngoài cụm (cluster), ví dụ như tệp .properties hoặc tệp khóa SSH. Kustomize cung cấp các tính năng `secretGenerator` và `configMapGenerator` để tạo Secret và ConfigMap từ các tệp tin hoặc các giá trị trực tiếp (literals). 
+
+Các [`Service`](https://kubernetes.io/docs/concepts/services-networking/service/) trong Kubernetes
+Service API, một thành phần của Kubernetes, là một lớp trừu tượng giúp bạn công khai (expose) các nhóm Pod thông qua mạng. Mỗi đối tượng Service định nghĩa một tập hợp logic các điểm cuối (endpoint) — thường là các Pod — cùng với chính sách quy định cách thức truy cập vào các Pod đó.
+
+Ví dụ, hãy xem xét một hệ thống backend xử lý hình ảnh không lưu trạng thái (stateless) đang chạy với 3 bản sao (replica). Các bản sao này có thể thay thế cho nhau; các thành phần frontend không cần quan tâm cụ thể mình đang kết nối với backend nào. Ngay cả khi các Pod thực tế tạo nên tập hợp backend đó thay đổi, các client ở phía frontend cũng không cần phải biết về sự thay đổi này, cũng như không cần tự mình theo dõi danh sách các backend hiện có.
+
+
+
+## user-service (Các service khác làm tương tự)
+
+- Build image user-service để đảm bảo đã có container này trước
+
+```
+docker build -t ecommerce/user-service:local services/user-service
+```
+
+- verify
+```
+docker images | grep ecommerce/user-service
+```
+
+- Load image vào Kind
+```
+kind load docker-image ecommerce/user-service:local --name ecommerce-local
+```
+- verify
+```
+docker exec ecommerce-local-control-plane crictl images | grep ecommerce/user-service
+```
+- Apply User Service + Verify
+```
+kubectl apply -k k8s/base/user-service
+kubectl get pods -n ecommerce
+```
+- kiểm tra /health và /ready
+```
+kubectl port-forward -n ecommerce svc/user-service 8001:8001
+```
+
+Sau khi tạo các service xong không cần phải apply từng service nữa chỉ cần dùng thư mục chứa các configuaration để mà apply nhé~
+```
+kubectl apply -k k8s/overlays/local
+```
+
+
+
 
 ```
 docker build -t ecommerce/user-service:local services/user-service
 docker build -t ecommerce/product-service:local services/product-service
 docker build -t ecommerce/cart-service:local services/cart-service
 docker build -t ecommerce/order-service:local services/order-service
+docker build -t ecommerce/ai-diagnosis-service:local services/ai-diagnosis-service
 ```
 ```
 kind load docker-image ecommerce/user-service:local --name ecommerce-local
 kind load docker-image ecommerce/product-service:local --name ecommerce-local
 kind load docker-image ecommerce/cart-service:local --name ecommerce-local
 kind load docker-image ecommerce/order-service:local --name ecommerce-local
+kind load docker-image ecommerce/ai-diagnosis-service:local --name ecommerce-local
 ```
 
 ```

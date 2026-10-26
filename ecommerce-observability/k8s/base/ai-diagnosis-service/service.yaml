@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-diagnosis-service
+  namespace: ecommerce
+spec:
+  selector:
+    app: ai-diagnosis-service
+
+  ports:
+    - port: 8010
+      targetPort: 8000
+      protocol: TCP
+      name: http

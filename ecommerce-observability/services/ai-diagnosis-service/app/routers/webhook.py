@@ -2,6 +2,9 @@ from fastapi import APIRouter
 
 from app.schemas.alertmanager import AlertmanagerWebhook
 from app.services.incident import process_alert
+from app.services.prometheus import PrometheusClient
+from app.services.loki import LokiClient
+from app.services.kubernetes import KubernetesClient
 
 
 router = APIRouter(
@@ -9,7 +12,31 @@ router = APIRouter(
     tags=["webhook"],
 )
 
+prometheus = PrometheusClient()
+loki = LokiClient()
+kubernetes = KubernetesClient()
+
 
 @router.post("/alertmanager")
-def alertmanager_webhook(payload: AlertmanagerWebhook):
-    return process_alert(payload)
+async def alertmanager_webhook(payload: AlertmanagerWebhook):
+    incident = process_alert(payload)
+
+    service = None
+
+    if incident.incidents:
+        service = incident.incidents[0].service
+
+    if service:
+        incident.prometheus = (
+            await prometheus.collect_service_evidence(service)
+        )
+
+        incident.loki = (
+            await loki.collect_service_evidence(service)
+        )
+
+        incident.kubernetes = (
+            kubernetes.get_service_evidence(service)
+        )
+
+    return incident

@@ -11,7 +11,7 @@ def test_alertmanager_webhook():
     async def mock_prometheus(service: str):
         return {
             "service": service,
-            "up": [{"metric": {"service": service}, "value": [1, "1"]}],
+            "up": [{"metric": {"service": service}, "value": [1, "0"]}],
         }
 
     async def mock_loki(service: str):
@@ -27,8 +27,8 @@ def test_alertmanager_webhook():
             "deployment": {
                 "name": service,
                 "desired_replicas": 1,
-                "ready_replicas": 1,
-                "available_replicas": 1,
+                "ready_replicas": 0,
+                "available_replicas": 0,
             },
             "pods": [],
         }
@@ -84,3 +84,20 @@ def test_alertmanager_webhook():
     assert data["kubernetes"]["service"] == "order-service"
 
     assert data["diagnosis"] is None
+    assert data["correlation"] is not None
+
+    assert data["correlation"]["consistent"] is True
+
+    assert (
+        "Prometheus target is down"
+        in data["correlation"]["signals"]
+    )
+
+    assert (
+        "Kubernetes deployment has no ready replicas"
+        in data["correlation"]["signals"]
+    )
+
+    assert data["correlation"]["root_cause_candidates"] == [
+        "order-service is unavailable"
+    ]

@@ -5,6 +5,7 @@ from app.services.incident import process_alert
 from app.services.prometheus import PrometheusClient
 from app.services.loki import LokiClient
 from app.services.kubernetes import KubernetesClient
+from app.services.correlation import correlate_evidence
 
 
 router = APIRouter(
@@ -27,16 +28,12 @@ async def alertmanager_webhook(payload: AlertmanagerWebhook):
         service = incident.incidents[0].service
 
     if service:
-        incident.prometheus = (
-            await prometheus.collect_service_evidence(service)
-        )
+        incident.prometheus = (await prometheus.collect_service_evidence(service))
 
-        incident.loki = (
-            await loki.collect_service_evidence(service)
-        )
+        incident.loki = (await loki.collect_service_evidence(service))
 
-        incident.kubernetes = (
-            kubernetes.get_service_evidence(service)
-        )
+        incident.kubernetes = (kubernetes.get_service_evidence(service))
+
+        incident.correlation = correlate_evidence(incident)
 
     return incident

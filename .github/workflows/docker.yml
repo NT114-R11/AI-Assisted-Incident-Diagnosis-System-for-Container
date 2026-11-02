@@ -28,6 +28,7 @@ jobs:
           - product-service
           - cart-service
           - order-service
+          - ai-diagnosis-service
 
     steps:
       - name: Checkout tested commit

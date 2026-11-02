@@ -99,5 +99,8 @@ jobs:
           pip install pytest httpx
 
       - name: Run tests
+        env:
+          TELEGRAM_BOT_TOKEN: test-token
+          TELEGRAM_CHAT_ID: test-chat
         run: |
           python -m pytest -v

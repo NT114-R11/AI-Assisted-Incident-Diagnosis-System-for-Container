@@ -21,4 +21,4 @@ Thumbs.db
 
 # Database volumes / local data
 postgres_data/
-k8s/overlays/local/secret.yamlg
+ecommerce-observability/k8s/overlays/local/secret.yaml

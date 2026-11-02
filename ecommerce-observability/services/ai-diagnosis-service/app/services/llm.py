@@ -69,6 +69,8 @@ IMPORTANT RULES:
 - Do not replace the deterministic root-cause ranking.
 - Use only the incident and correlation data provided below.
 - Clearly distinguish confirmed evidence from inference.
+- If the top candidate is broad or generic, do not invent a more specific
+  cause; explain what the available evidence supports and state the uncertainty.
 - Keep the explanation concise and operationally useful.
 
 Incident:

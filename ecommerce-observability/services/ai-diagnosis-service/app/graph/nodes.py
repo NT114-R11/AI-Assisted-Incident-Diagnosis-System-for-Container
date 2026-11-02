@@ -1,132 +1,86 @@
+import logging
+
+from app.schemas.correlation import CorrelationResult, RootCauseCandidate
 from app.schemas.diagnosis import DiagnosisState
-from app.schemas.correlation import (CorrelationResult, RootCauseCandidate)
-from app.services.ranking import rank_root_causes
 from app.schemas.diagnosis_result import DiagnosisResult
 from app.services.llm import LLMClient
-import logging
+from app.services.ranking import rank_root_causes
+
 logger = logging.getLogger(__name__)
 
-def analyze_alert(state: DiagnosisState) -> DiagnosisState:
-    """
-    Analyze the incoming incident alert.
 
-    This node performs deterministic preprocessing only.
-    """
-    if state.incident is None:
-        return state
-
+def _record_signals(state: DiagnosisState, signals: list[str]) -> DiagnosisState:
+    if state.correlation is None:
+        state.correlation = CorrelationResult()
+    state.correlation.signals.extend(signals)
     return state
 
-def analyze_service(state: DiagnosisState) -> DiagnosisState:
-    """
-    Analyze application/service-level evidence.
 
-    This node inspects metrics and logs collected from
-    Prometheus and Loki and records deterministic signals
-    for later correlation.
-    """
-    evidence = state.service_evidence
-    metrics = evidence.metrics
-    logs = evidence.logs
+def analyze_alert(state: DiagnosisState) -> DiagnosisState:
+    """Deterministic preprocessing placeholder for the incoming alert."""
+    return state
+
+
+def analyze_service(state: DiagnosisState) -> DiagnosisState:
+    """Record Prometheus/Loki service-level signals."""
+    metrics = state.service_evidence.metrics
+    logs = state.service_evidence.logs
     signals: list[str] = []
 
-    # Prometheus: target availability
     up_results = metrics.get("up", [])
-
     if up_results:
         value = up_results[0].get("value")
-
         if value and value[-1] == "0":
             signals.append("Service target is down")
 
-    # Prometheus: error rate
     error_rate = metrics.get("error_rate")
-
-    if isinstance(error_rate, (int, float)) and error_rate > 0:
+    if isinstance(error_rate, (int, float)) and error_rate > 0.05:
         signals.append(f"Service error rate is elevated: {error_rate}")
 
-    # Prometheus: p95 latency
     p95_latency = metrics.get("p95_latency")
-
     if isinstance(p95_latency, (int, float)) and p95_latency > 1.0:
         signals.append(f"Service p95 latency is elevated: {p95_latency}s")
 
-    # Loki: application errors
     error_logs = logs.get("error_logs", [])
     if error_logs:
         signals.append(f"Service has {len(error_logs)} error log result(s)")
 
-    # Store deterministic service signals in correlation.
-    if state.correlation is None:
-        from app.schemas.correlation import CorrelationResult
-        state.correlation = CorrelationResult()
+    return _record_signals(state, signals)
 
-    state.correlation.signals.extend(signals)
-    return state
 
 def analyze_dependency(state: DiagnosisState) -> DiagnosisState:
-    """
-    Analyze service-to-service and PostgreSQL dependencies.
-
-    This node records deterministic dependency signals.
-    It does not determine the final root cause.
-    """
+    """Record service-to-service and PostgreSQL dependency signals."""
     evidence = state.dependency_evidence
-
     signals: list[str] = []
 
-    # Service-to-service dependencies
     for dependency in evidence.services:
         service = dependency.get("service")
         healthy = dependency.get("healthy")
-
         if not service:
             continue
 
-        if healthy is False:
+        if healthy is True:
+            signals.append(f"Dependency {service} is healthy")
+        elif healthy is False:
             status_code = dependency.get("status_code")
-
             if status_code is not None:
-                signals.append(
-                    f"Dependency {service} is unhealthy "
-                    f"(status={status_code})")
+                signals.append(f"Dependency {service} is unhealthy (status={status_code})")
             else:
                 signals.append(f"Dependency {service} is unreachable")
 
-        elif healthy is True:
-            signals.append(f"Dependency {service} is healthy")
-    # PostgreSQL
-    postgres = evidence.postgres
+    postgres_healthy = (evidence.postgres or {}).get("healthy")
+    if postgres_healthy is not None:
+        status = "healthy" if postgres_healthy else "unhealthy"
+        signals.append(f"PostgreSQL dependency is {status}")
 
-    if postgres:
-        postgres_healthy = postgres.get("healthy")
+    return _record_signals(state, signals)
 
-        if postgres_healthy is False:
-            signals.append("PostgreSQL dependency is unhealthy")
-        elif postgres_healthy is True:
-            signals.append("PostgreSQL dependency is healthy")
 
-    if state.correlation is None:
-        from app.schemas.correlation import CorrelationResult
-
-        state.correlation = CorrelationResult()
-    state.correlation.signals.extend(signals)
-    return state
-
-def analyze_infrastructure(state: DiagnosisState,) -> DiagnosisState:
-    """
-    Analyze Kubernetes infrastructure evidence.
-
-    This node performs deterministic analysis of:
-    - pods
-    - deployments
-    - Kubernetes events
-
-    It records infrastructure signals for later correlation.
-    """
+def analyze_infrastructure(state: DiagnosisState) -> DiagnosisState:
+    """Record Kubernetes deployment, pod and event signals."""
     evidence = state.infrastructure_evidence
     signals: list[str] = []
-    # Analyze deployment
+
     deployment = evidence.deployments
     if deployment:
         desired = deployment.get("desired_replicas", 0)
@@ -139,128 +93,94 @@ def analyze_infrastructure(state: DiagnosisState,) -> DiagnosisState:
             signals.append("Kubernetes deployment has no ready replicas")
         elif desired > ready:
             signals.append(
-                f"Kubernetes deployment has insufficient ready replicas: {ready}/{desired}")
+                f"Kubernetes deployment has insufficient ready replicas: {ready}/{desired}"
+            )
 
         if desired > 0 and available < desired:
             signals.append(
-                f"Kubernetes deployment has insufficient available replicas: {available}/{desired}")
+                f"Kubernetes deployment has insufficient available replicas: {available}/{desired}"
+            )
 
-    # Analyze pods
     for pod in evidence.pods:
         pod_name = pod.get("name")
-        phase = pod.get("phase")
-
         if not pod_name:
             continue
 
+        phase = pod.get("phase")
         if phase != "Running":
-            signals.append(
-                f"Pod {pod_name} is not running "
-                f"(phase={phase})")
+            signals.append(f"Pod {pod_name} is not running (phase={phase})")
 
         for container in pod.get("containers", []):
-            container_name = container.get("name")
-            ready = container.get("ready")
-            restart_count = container.get("restart_count", 0)
+            name = container.get("name")
+            if name and container.get("ready") is False:
+                signals.append(f"Container {name} in pod {pod_name} is not ready")
 
-            if container_name and ready is False:
+            restarts = container.get("restart_count", 0)
+            if restarts > 0:
                 signals.append(
-                    f"Container {container_name} in pod "
-                    f"{pod_name} is not ready")
+                    f"Container {name} in pod {pod_name} has restarted {restarts} time(s)"
+                )
 
-            if restart_count > 0:
-                signals.append(
-                    f"Container {container_name} in pod "
-                    f"{pod_name} has restarted "
-                    f"{restart_count} time(s)")
-
-    # Analyze Kubernetes events
     for event in evidence.events:
-        event_type = event.get("type")
-        reason = event.get("reason")
+        if event.get("type") == "Warning":
+            reason = event.get("reason")
+            signals.append(
+                f"Kubernetes warning event: {reason}"
+                if reason
+                else "Kubernetes warning event detected"
+            )
 
-        if event_type == "Warning":
-            if reason:
-                signals.append(f"Kubernetes warning event: {reason}")
-            else:
-                signals.append("Kubernetes warning event detected")
+    return _record_signals(state, signals)
 
-    if state.correlation is None:
-        from app.schemas.correlation import CorrelationResult
-
-        state.correlation = CorrelationResult()
-    state.correlation.signals.extend(signals)
-    return state
 
 def analyze_os(state: DiagnosisState) -> DiagnosisState:
-    """
-    Analyze operating-system evidence collected from
-    Node Exporter / Prometheus.
-
-    This node performs deterministic analysis of:
-    - CPU
-    - memory
-    - disk
-    - network
-    """
+    """Record OS-level CPU, memory, disk and network signals."""
     evidence = state.os_evidence
     signals: list[str] = []
 
-    # CPU
-    cpu = evidence.cpu
-    usage_percent = cpu.get("usage_percent")
-    if isinstance(usage_percent, (int, float)):
-        if usage_percent >= 90:
-            signals.append(f"OS CPU usage is critical: {usage_percent}%")
-        elif usage_percent >= 75:
-            signals.append(f"OS CPU usage is elevated: {usage_percent}%")
+    # (label, data, elevated threshold); critical is always 90
+    for label, data, elevated in (
+        ("CPU", evidence.cpu, 75),
+        ("memory", evidence.memory, 75),
+        ("disk", evidence.disk, 80),
+    ):
+        usage = data.get("usage_percent")
+        if not isinstance(usage, (int, float)):
+            continue
+        if usage >= 90:
+            signals.append(f"OS {label} usage is critical: {usage}%")
+        elif usage >= elevated:
+            signals.append(f"OS {label} usage is elevated: {usage}%")
 
-    # Memory
-    memory = evidence.memory
-    usage_percent = memory.get("usage_percent")
-    if isinstance(usage_percent, (int, float)):
-        if usage_percent >= 90:
-            signals.append(f"OS memory usage is critical: {usage_percent}%")
-        elif usage_percent >= 75:
-            signals.append(f"OS memory usage is elevated: {usage_percent}%")
-
-    # Disk
-    disk = evidence.disk
-    usage_percent = disk.get("usage_percent")
-    if isinstance(usage_percent, (int, float)):
-        if usage_percent >= 90:
-            signals.append(f"OS disk usage is critical: {usage_percent}%")
-        elif usage_percent >= 80:
-            signals.append(f"OS disk usage is elevated: {usage_percent}%")
-
-    # Network
-    network = evidence.network
-    errors = network.get("errors")
+    errors = evidence.network.get("errors")
     if isinstance(errors, (int, float)) and errors > 0:
         signals.append(f"OS network errors detected: {errors}")
 
-    if state.correlation is None:
-        from app.schemas.correlation import CorrelationResult
-        state.correlation = CorrelationResult()
-    state.correlation.signals.extend(signals)
-    return state
+    return _record_signals(state, signals)
+
+
+def _add_candidate(
+    candidates: list[RootCauseCandidate],
+    cause: str,
+    evidence: list[str],
+    confidence: float,
+) -> None:
+    if not evidence:
+        return
+    candidates.append(
+        RootCauseCandidate(
+            cause=cause,
+            evidence=list(dict.fromkeys(evidence)),
+            confidence=confidence,
+        )
+    )
+
 
 def correlate(state: DiagnosisState) -> DiagnosisState:
-    """
-    Correlate signals across all evidence layers.
-    This node performs deterministic cross-layer reasoning.
-
-    The purpose is to:
-    - determine whether evidence is consistent,
-    - identify root-cause candidates,
-    - attach supporting evidence,
-    - assign a deterministic confidence score.
-    """
-
+    """Derive ranked root-cause candidates from the collected signals."""
     incident = state.incident
-    correlation = state.correlation
-    if correlation is None:
-        correlation = CorrelationResult()
+    correlation = state.correlation or CorrelationResult()
+
     if incident is None or not incident.service:
         state.correlation = correlation
         return state
@@ -269,151 +189,76 @@ def correlate(state: DiagnosisState) -> DiagnosisState:
     signals = correlation.signals
     candidates: list[RootCauseCandidate] = []
 
-    # Service unavailable
+    def pick(predicate) -> list[str]:
+        return [s for s in signals if predicate(s)]
 
-        # Service unavailable
+    def add(cause: str, evidence: list[str], confidence: float) -> None:
+        _add_candidate(candidates, cause, evidence, confidence)
 
-    service_down = (
-        "Service target is down" in signals
-        or "Prometheus target is down" in signals)
+    # 1. Service availability
+    down = pick(lambda s: s in {"Service target is down", "Prometheus target is down"})
+    scaled = pick(lambda s: s == "Kubernetes deployment has been scaled to zero replicas")
+    no_ready = pick(lambda s: s == "Kubernetes deployment has no ready replicas")
 
-    deployment_scaled_to_zero = (
-        "Kubernetes deployment has been scaled to zero replicas"
-        in signals)
+    if scaled:
+        add(f"{service} is scaled to zero replicas", down + scaled, 0.98)
+    elif down and no_ready:
+        add(f"{service} is unavailable", down + no_ready, 0.95)
 
-    deployment_unavailable = (
-        "Kubernetes deployment has no ready replicas"
-        in signals)
-
-    # Case 1: Deployment was explicitly scaled to zero.
-    if deployment_scaled_to_zero:
-        evidence = [
-            signal
-            for signal in signals
-            if signal in {
-                "Service target is down",
-                "Prometheus target is down",
-                "Kubernetes deployment has been scaled to zero replicas",
-            }
-        ]
-
-        candidates.append(
-            RootCauseCandidate(
-                cause=f"{service} is scaled to zero replicas",
-                evidence=evidence,
-                confidence=0.98,
-            )
+    # 2. Error rate
+    error_signals = pick(lambda s: s.startswith("Service error rate is elevated:"))
+    error_logs = pick(lambda s: s.startswith("Service has ") and "error log result" in s)
+    if error_signals:
+        add(
+            f"{service} has an elevated HTTP error rate",
+            error_signals + error_logs,
+            0.82 if error_logs else 0.75,
         )
 
-    # Case 2: Service is down while deployment expects replicas.
-    elif service_down and deployment_unavailable:
-        evidence = [
-            signal
-            for signal in signals
-            if signal in {
-                "Service target is down",
-                "Prometheus target is down",
-                "Kubernetes deployment has no ready replicas",
-            }
-        ]
+    # 3. Latency
+    add(
+        f"{service} has elevated request latency",
+        pick(lambda s: s.startswith("Service p95 latency is elevated:")),
+        0.78,
+    )
 
-        candidates.append(
-            RootCauseCandidate(
-                cause=f"{service} is unavailable",
-                evidence=evidence,
-                confidence=0.95,
-            )
-        )
+    # 4. Service-to-service dependencies
+    for signal in pick(
+        lambda s: s.startswith("Dependency ")
+        and ("is unhealthy" in s or "is unreachable" in s)
+    ):
+        name = signal[len("Dependency "):].split(" is ", 1)[0]
+        add(f"{name} is unavailable or unhealthy", [signal], 0.85)
 
+    # 5. PostgreSQL
+    add(
+        "PostgreSQL is unavailable",
+        pick(lambda s: s == "PostgreSQL dependency is unhealthy"),
+        0.90,
+    )
 
+    # 6. Kubernetes infrastructure
+    add(
+        f"Kubernetes infrastructure issue affecting {service}",
+        pick(lambda s: s.startswith(("Pod ", "Container ", "Kubernetes warning event:"))),
+        0.80,
+    )
 
-    # Dependency failure
+    # 7. OS resource exhaustion
+    add(
+        f"OS resource exhaustion affecting {service}",
+        pick(lambda s: s.startswith("OS ") and "critical" in s),
+        0.85,
+    )
 
-    unhealthy_dependencies = [
-        signal
-        for signal in signals
-        if signal.startswith("Dependency ")
-        and (
-            "is unhealthy" in signal
-            or "is unreachable" in signal
-        )
-    ]
+    # 8. Generic fallback so unknown signals still yield a candidate
+    if not candidates and signals:
+        add(f"{service} is experiencing a service degradation or incident", signals, 0.40)
 
-    if unhealthy_dependencies:
-        for signal in unhealthy_dependencies:
-            candidates.append(
-                RootCauseCandidate(
-                    cause=signal,
-                    evidence=[signal],
-                    confidence=0.85,
-                )
-            )
-
-    # PostgreSQL failure
-
-    postgres_unhealthy = (
-        "PostgreSQL dependency is unhealthy"
-        in signals)
-
-    if postgres_unhealthy:
-        candidates.append(
-            RootCauseCandidate(
-                cause="PostgreSQL is unavailable",
-                evidence=[
-                    "PostgreSQL dependency is unhealthy"
-                ],
-                confidence=0.90)
-        )
-
-    # Infrastructure failure
-
-    infrastructure_signals = [
-        signal
-        for signal in signals
-        if (
-            signal.startswith("Pod ")
-            or signal.startswith("Container ")
-            or signal.startswith("Kubernetes warning event:")
-        )
-    ]
-
-    if infrastructure_signals:
-        candidates.append(
-            RootCauseCandidate(
-                cause=(
-                    f"Kubernetes infrastructure issue "
-                    f"affecting {service}"
-                ),
-                evidence=infrastructure_signals,
-                confidence=0.80,
-            )
-        )
-
-    # OS resource exhaustion
-    os_signals = [
-        signal
-        for signal in signals
-        if signal.startswith("OS ")
-    ]
-
-    critical_os_signals = [signal for signal in os_signals if "critical" in signal]
-    if critical_os_signals:
-        candidates.append(
-            RootCauseCandidate(
-                cause=(
-                    f"OS resource exhaustion affecting "
-                    f"{service}"
-                ),
-                evidence=critical_os_signals,
-                confidence=0.85)
-        )
-
-    # Determine consistency
-    correlation.consistent = len(candidates) > 0
+    correlation.consistent = bool(candidates)
     correlation.root_cause_candidates = rank_root_causes(candidates)
     state.correlation = correlation
     return state
-
 
 
 async def generate_diagnosis(state: DiagnosisState) -> DiagnosisState:
@@ -422,68 +267,56 @@ async def generate_diagnosis(state: DiagnosisState) -> DiagnosisState:
 
     incident = state.incident
     correlation = state.correlation
+    service = incident.service or "unknown"
 
     if correlation is None or not correlation.root_cause_candidates:
-        state.diagnosis = ("Unable to determine a root cause from the available evidence.")
+        state.diagnosis = "Unable to determine a root cause from the available evidence."
         state.confidence = 0.0
         state.recommendations = [
             "Collect additional metrics, logs, and Kubernetes state.",
-            "Inspect recent Kubernetes events."]
-
+            "Inspect recent Kubernetes events.",
+        ]
         state.diagnosis_result = DiagnosisResult(
             root_cause="Unknown",
             explanation=state.diagnosis,
-            affected_service=incident.service or "unknown",
+            affected_service=service,
             evidence=correlation.signals if correlation else [],
             confidence=0.0,
-            impact=(
-                f"The impact of {incident.service or 'the affected service'} "
-                "cannot be determined from the available evidence."
-            ),
-            recommendations=state.recommendations
+            impact=f"The impact of {service} cannot be determined from the available evidence.",
+            recommendations=state.recommendations,
         )
-
         return state
 
     candidate = correlation.root_cause_candidates[0]
-    service = incident.service or "unknown"
 
-    logger.info("Starting LLM diagnosis for service=%s alert=%s",service,incident.alertname)
+    logger.info("Starting LLM diagnosis for service=%s alert=%s", service, incident.alertname)
     try:
-        llm_client = LLMClient()
-
-        llm_result = await llm_client.diagnose(
+        explanation = await LLMClient().diagnose(
             incident=incident.model_dump(),
-            correlation=correlation.model_dump())
-        logger.info("LLM diagnosis completed successfully for service=%s",service)
+            correlation=correlation.model_dump(),
+        )
+        logger.info("LLM diagnosis completed successfully for service=%s", service)
     except Exception as e:
-
-        logger.warning("LLM diagnosis failed, using deterministic fallback: %s",e, exc_info=True)
-
-        llm_result = (
+        logger.warning("LLM diagnosis failed, using deterministic fallback: %s", e, exc_info=True)
+        explanation = (
             f"{candidate.cause}. "
-            f"The diagnosis is supported by "
-            f"{len(candidate.evidence)} piece(s) of evidence.")
+            f"The diagnosis is supported by {len(candidate.evidence)} piece(s) of evidence."
+        )
 
     state.diagnosis = candidate.cause
     state.confidence = candidate.score
-
     state.recommendations = [
         f"Inspect the {service} deployment and pod status.",
         "Inspect recent Kubernetes warning events.",
         f"Review {service} logs for related errors.",
     ]
-
     state.diagnosis_result = DiagnosisResult(
         root_cause=candidate.cause,
-        explanation=llm_result,
+        explanation=explanation,
         affected_service=service,
         evidence=candidate.evidence,
         confidence=candidate.score,
-        impact=(
-            f"The {service} service may be unavailable or degraded for users."
-        ),
+        impact=f"The {service} service may be unavailable or degraded for users.",
         recommendations=state.recommendations,
     )
-
     return state

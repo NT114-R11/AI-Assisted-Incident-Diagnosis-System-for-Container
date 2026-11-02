@@ -20,30 +20,52 @@ class KubernetesClient:
 
     def get_pods(self) -> list[dict[str, Any]]:
         pods = self.core.list_namespaced_pod(namespace=self.namespace)
-
         result = []
-
         for pod in pods.items:
             containers = []
 
             if pod.status.container_statuses:
                 for container in pod.status.container_statuses:
-                    containers.append({
-                            "name": container.name,
-                            "ready": container.ready,
-                            "restart_count": container.restart_count,
-                        }
-                    )
+
+                    container_info = {
+                        "name": container.name,
+                        "ready": container.ready,
+                        "restart_count": container.restart_count,
+                        "state": None,
+                        "reason": None,
+                        "message": None,
+                        "last_state": None,
+                        "last_reason": None}
+
+                    if container.state:
+                        if container.state.waiting:
+                            container_info["state"] = "waiting"
+                            container_info["reason"] = container.state.waiting.reason
+                            container_info["message"] = container.state.waiting.message
+
+                        elif container.state.running:
+                            container_info["state"] = "running"
+
+                        elif container.state.terminated:
+                            container_info["state"] = "terminated"
+                            container_info["reason"] = container.state.terminated.reason
+                            container_info["message"] = container.state.terminated.message
+
+                    if container.last_state:
+                        if container.last_state.terminated:
+                            container_info["last_state"] = "terminated"
+                            container_info["last_reason"] = (
+                                container.last_state.terminated.reason)
+
+                    containers.append(container_info)
 
             result.append({
-                    "name": pod.metadata.name,
-                    "phase": pod.status.phase,
-                    "containers": containers,
-                }
-            )
+                "name": pod.metadata.name,
+                "phase": pod.status.phase,
+                "node": pod.spec.node_name,
+                "containers": containers})
 
         return result
-
     def get_deployment(self,name: str) -> dict[str, Any]:
         deployment = self.apps.read_namespaced_deployment(
             name=name,
@@ -58,6 +80,7 @@ class KubernetesClient:
                 deployment.status.available_replicas or 0
             )
         }
+
 
     def get_service_evidence(self,service: str) -> dict[str, Any]:
         return {

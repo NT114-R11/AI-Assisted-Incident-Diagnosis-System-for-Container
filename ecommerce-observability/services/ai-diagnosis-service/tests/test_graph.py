@@ -364,7 +364,7 @@ async def test_diagnosis_graph_correlates_dependency_failure():
 
     candidate = dependency_candidates[0]
 
-    assert candidate.cause == "Dependency cart-service is unreachable"
+    assert candidate.cause == "cart-service is unavailable or unhealthy"
     assert candidate.confidence == 0.85
     assert candidate.evidence == [
         "Dependency cart-service is unreachable"
@@ -553,3 +553,105 @@ async def test_generate_diagnosis_falls_back_when_llm_fails():
         in diagnosis.evidence)
 
     fake_llm.diagnose.assert_awaited_once()
+
+@pytest.mark.asyncio
+async def test_diagnosis_graph_high_error_rate():
+    state = DiagnosisState(
+        incident=Incident(
+            status="firing",
+            alertname="EcommerceHighErrorRate",
+            service="order-service",
+            severity="warning",
+        ),
+        service_evidence=ServiceEvidence(
+            metrics={
+                "up": [{"value": [1234567890, "1"]}],
+                "error_rate": 0.18,
+            },
+            logs={
+                "error_logs": [],
+            },
+        ),
+        infrastructure_evidence=InfrastructureEvidence(
+            deployments={
+                "desired_replicas": 1,
+                "ready_replicas": 1,
+                "available_replicas": 1,
+            }
+        ),
+    )
+
+    with patch(
+        "app.graph.nodes.LLMClient",
+        return_value=mock_llm(),
+    ):
+        result = await diagnosis_graph.ainvoke(state)
+
+    candidates = result["correlation"].root_cause_candidates
+    assert candidates[0].cause == (
+        "order-service has an elevated HTTP error rate"
+    )
+    assert "Service error rate is elevated: 0.18" in candidates[0].evidence
+
+
+@pytest.mark.asyncio
+async def test_diagnosis_graph_high_latency():
+    state = DiagnosisState(
+        incident=Incident(
+            status="firing",
+            alertname="EcommerceHighLatency",
+            service="cart-service",
+            severity="warning",
+        ),
+        service_evidence=ServiceEvidence(
+            metrics={
+                "up": [{"value": [1234567890, "1"]}],
+                "p95_latency": 3.4,
+            }
+        ),
+        infrastructure_evidence=InfrastructureEvidence(
+            deployments={
+                "desired_replicas": 1,
+                "ready_replicas": 1,
+                "available_replicas": 1,
+            }
+        ),
+    )
+
+    with patch(
+        "app.graph.nodes.LLMClient",
+        return_value=mock_llm(),
+    ):
+        result = await diagnosis_graph.ainvoke(state)
+
+    candidates = result["correlation"].root_cause_candidates
+    assert candidates[0].cause == (
+        "cart-service has elevated request latency"
+    )
+    assert "Service p95 latency is elevated: 3.4s" in candidates[0].evidence
+
+
+@pytest.mark.asyncio
+async def test_diagnosis_graph_unknown_signal_uses_generic_candidate():
+    state = DiagnosisState(
+        incident=Incident(
+            status="firing",
+            alertname="FutureIncidentType",
+            service="product-service",
+            severity="warning",
+        ),
+        correlation=CorrelationResult(
+            signals=["New observability signal detected"],
+        ),
+    )
+
+    with patch(
+        "app.graph.nodes.LLMClient",
+        return_value=mock_llm(),
+    ):
+        result = await diagnosis_graph.ainvoke(state)
+
+    candidates = result["correlation"].root_cause_candidates
+    assert len(candidates) == 1
+    assert candidates[0].confidence == 0.40
+    assert "New observability signal detected" in candidates[0].evidence

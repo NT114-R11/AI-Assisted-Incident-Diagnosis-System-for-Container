@@ -25,7 +25,7 @@ def test_correlate_service_unavailable():
                     },
                     "value": [1234567890, "0"],
                 }
-            ],
+            ]
         },
         kubernetes={
             "service": "order-service",
@@ -41,20 +41,25 @@ def test_correlate_service_unavailable():
             "service": "order-service",
             "logs": [],
             "error_logs": [],
-        },
+        }
     )
 
     result = correlate_evidence(context)
 
     assert result.consistent is True
-
     assert "Prometheus target is down" in result.signals
-
     assert (
         "Kubernetes deployment has no ready replicas"
         in result.signals
     )
+    assert len(result.root_cause_candidates) == 1
 
-    assert result.root_cause_candidates == [
-        "order-service is unavailable"
-    ]
+    candidate = result.root_cause_candidates[0]
+
+    assert candidate.cause == "order-service is unavailable"
+    assert "Prometheus target is down" in candidate.evidence
+    assert (
+        "Kubernetes deployment has no ready replicas"
+        in candidate.evidence
+    )
+    assert candidate.confidence == 0.95

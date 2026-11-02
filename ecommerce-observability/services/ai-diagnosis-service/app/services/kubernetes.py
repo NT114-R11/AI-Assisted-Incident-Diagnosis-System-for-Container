@@ -77,7 +77,7 @@ class KubernetesClient:
                 "message": event.message,
                 "object": (event.involved_object.name if event.involved_object else None),
                 "object_kind": (event.involved_object.kind if event.involved_object else None),
-                "timestamp": (event.last_timestamp.isoformat() if event.involved_object else None)
+                "timestamp": (event.last_timestamp.isoformat() if event.last_timestamp else None)
             })
         return result[:limit]
     
@@ -96,7 +96,7 @@ class KubernetesClient:
                 "service": "postgres",
                 "healthy": False,
                 "reason": "PostgreSQL pod not found",
-                "pods": [],
+                "pods": []
             }
 
         result = []

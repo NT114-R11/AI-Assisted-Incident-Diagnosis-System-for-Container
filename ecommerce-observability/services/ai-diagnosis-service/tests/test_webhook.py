@@ -1,3 +1,4 @@
+from unittest.mock import AsyncMock, MagicMock
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -7,11 +8,16 @@ from app.routers import webhook
 client = TestClient(app)
 
 
-def test_alertmanager_webhook():
+def test_alertmanager_webhook(monkeypatch):
     async def mock_prometheus(service: str):
         return {
             "service": service,
-            "up": [{"metric": {"service": service}, "value": [1, "0"]}],
+            "up": [
+                {
+                    "metric": {"service": service},
+                    "value": [1, "0"],
+                }
+            ],
         }
 
     async def mock_loki(service: str):
@@ -31,11 +37,52 @@ def test_alertmanager_webhook():
                 "available_replicas": 0,
             },
             "pods": [],
+            "events": [],
         }
 
-    webhook.prometheus.collect_service_evidence = mock_prometheus
-    webhook.loki.collect_service_evidence = mock_loki
-    webhook.kubernetes.get_service_evidence = mock_kubernetes
+    def mock_postgres():
+        return {
+            "service": "postgres",
+            "healthy": True,
+            "pods": [],
+        }
+
+    fake_llm = MagicMock()
+    fake_llm.diagnose = AsyncMock(
+        return_value=(
+            "The order-service is unavailable because its "
+            "Kubernetes deployment has no ready replicas."
+        )
+    )
+
+    monkeypatch.setattr(
+        webhook.prometheus,
+        "collect_service_evidence",
+        mock_prometheus,
+    )
+
+    monkeypatch.setattr(
+        webhook.loki,
+        "collect_service_evidence",
+        mock_loki,
+    )
+
+    monkeypatch.setattr(
+        webhook.kubernetes,
+        "get_service_evidence",
+        mock_kubernetes,
+    )
+
+    monkeypatch.setattr(
+        webhook.kubernetes,
+        "get_postgres_evidence",
+        mock_postgres,
+    )
+
+    monkeypatch.setattr(
+        "app.graph.nodes.LLMClient",
+        lambda: fake_llm,
+    )
 
     payload = {
         "version": "4",
@@ -69,35 +116,29 @@ def test_alertmanager_webhook():
 
     data = response.json()
 
-    assert data["status"] == "firing"
-    assert data["receiver"] == "ai-diagnosis"
-    assert data["incident_count"] == 1
+    assert data["status"] == "diagnosed"
 
-    incident = data["incidents"][0]
+    diagnosis = data["diagnosis"]
 
-    assert incident["alertname"] == "EcommerceOrderServiceMissing"
-    assert incident["service"] == "order-service"
-    assert incident["severity"] == "critical"
+    assert diagnosis["root_cause"] == "order-service is unavailable"
+    assert diagnosis["affected_service"] == "order-service"
+    assert diagnosis["confidence"] > 0.0
 
-    assert data["prometheus"]["service"] == "order-service"
-    assert data["loki"]["service"] == "order-service"
-    assert data["kubernetes"]["service"] == "order-service"
-
-    assert data["diagnosis"] is None
-    assert data["correlation"] is not None
-
-    assert data["correlation"]["consistent"] is True
-
-    assert (
-        "Prometheus target is down"
-        in data["correlation"]["signals"]
-    )
+    assert "Service target is down" in diagnosis["evidence"]
 
     assert (
         "Kubernetes deployment has no ready replicas"
-        in data["correlation"]["signals"]
+        in diagnosis["evidence"]
     )
 
-    assert data["correlation"]["root_cause_candidates"] == [
-        "order-service is unavailable"
-    ]
+    assert len(diagnosis["recommendations"]) == 3
+
+    assert (
+        diagnosis["explanation"]
+        == (
+            "The order-service is unavailable because its "
+            "Kubernetes deployment has no ready replicas."
+        )
+    )
+
+    fake_llm.diagnose.assert_awaited_once()

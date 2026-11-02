@@ -10,6 +10,11 @@ resources:
   - ../../observability/loki
   - ../../observability/alloy
   - ../../observability/grafana
+  - ../../observability/node-exporter
   - postgres.yaml
   - secret.yaml
   - ingress.yaml
+
+
+patches:
+  - path: patch-replicas.yaml

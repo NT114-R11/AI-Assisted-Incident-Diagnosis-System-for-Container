@@ -35,6 +35,9 @@ spec:
 
             - name: LOKI_URL
               value: "http://loki:3100"
+          envFrom:
+            - secretRef:
+                name: ecommerce-secret
 
           livenessProbe:
             httpGet:

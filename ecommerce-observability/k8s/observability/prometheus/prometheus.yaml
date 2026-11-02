@@ -30,21 +30,22 @@ data:
               names:
                 - ecommerce
 
+
         relabel_configs:
-          # Chỉ scrape các Service có annotation prometheus.io/scrape=true
+          # Only scrape Services has annotation prometheus.io/scrape=true
           - source_labels:
               - __meta_kubernetes_service_annotation_prometheus_io_scrape
             action: keep
             regex: "true"
 
-          # Lấy metrics path từ annotation
+          # Take metrics path from annotation
           - source_labels:
               - __meta_kubernetes_service_annotation_prometheus_io_path
             action: replace
             target_label: __metrics_path__
             regex: (.+)
 
-          # Lấy port từ annotation
+          # Take port from annotation
           - source_labels:
               - __address__
               - __meta_kubernetes_service_annotation_prometheus_io_port
@@ -72,6 +73,35 @@ data:
           - source_labels:
               - __meta_kubernetes_pod_container_name
             target_label: container
+      - job_name: node-exporter
+        kubernetes_sd_configs:
+          - role: pod
+            namespaces:
+              names:
+                - ecommerce
+
+        relabel_configs:
+          - source_labels:
+              - __meta_kubernetes_pod_label_app
+            action: keep
+            regex: node-exporter
+
+          - source_labels:
+              - __meta_kubernetes_pod_ip
+            target_label: __address__
+            replacement: $1:9100
+
+          - source_labels:
+              - __meta_kubernetes_pod_node_name
+            target_label: node
+
+          - source_labels:
+              - __meta_kubernetes_namespace
+            target_label: namespace
+
+          - source_labels:
+              - __meta_kubernetes_pod_name
+            target_label: pod
 ---
 apiVersion: apps/v1
 kind: Deployment

@@ -373,6 +373,7 @@ kubectl rollout restart deployment/user-service -n ecommerce
 kubectl rollout restart deployment/product-service -n ecommerce
 kubectl rollout restart deployment/cart-service -n ecommerce
 kubectl rollout restart deployment/order-service -n ecommerce
+kubectl rollout restart deployment/ai-diagnosis-service -n ecommerce
 
 ```
 
@@ -395,4 +396,10 @@ docker start $(docker ps -aq --filter "label=io.x-k8s.kind.cluster=ecommerce-loc
 - Verify
 ```
 kubectl get nodes
+```
+
+
+- Xoá cluster
+```
+kind delete cluster --name ecommerce-local
 ```

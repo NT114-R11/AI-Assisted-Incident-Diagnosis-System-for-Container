@@ -1,7 +1,7 @@
 from typing import Any
 
 from pydantic import BaseModel, Field
-
+from app.schemas.diagnosis_result import DiagnosisResult
 from app.schemas.correlation import CorrelationResult
 from app.schemas.evidence import (
     DependencyEvidence,
@@ -27,3 +27,4 @@ class DiagnosisState(BaseModel):
     diagnosis: str | None = None
     confidence: float | None = None
     recommendations: list[str] = Field(default_factory=list)
+    diagnosis_result: DiagnosisResult | None = None

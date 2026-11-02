@@ -5,3 +5,4 @@ httpx
 kubernetes
 sqlalchemy
 langgraph
+openai

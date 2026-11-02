@@ -1,4 +1,7 @@
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
+
+patch("kubernetes.config.load_kube_config").start()
+patch("kubernetes.config.load_incluster_config").start()
 from fastapi.testclient import TestClient
 
 from app.main import app

@@ -100,4 +100,4 @@ jobs:
 
       - name: Run tests
         run: |
-          python -m pytest -vc
+          python -m pytest -v
